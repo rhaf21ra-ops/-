@@ -4,6 +4,18 @@ import { useCallback, useEffect, useRef, useState } from "react";
 import { BookOpen, Camera, Check, CreditCard, Loader2, RefreshCw, ShieldCheck } from "lucide-react";
 import { toast } from "sonner";
 import { createClient } from "@/lib/supabase/client";
+import { isSupabaseConfigured } from "@/lib/supabase-client";
+import { demoAccounts, demoIdentity } from "@/lib/demo-db";
+
+/** Demo mode only: shrink a photo to a small JPEG data URL so it fits in browser storage. */
+async function toSmallDataUrl(blob: Blob): Promise<string> {
+  const bmp = await createImageBitmap(blob);
+  const scale = Math.min(1, 640 / Math.max(bmp.width, bmp.height));
+  const c = document.createElement("canvas");
+  c.width = Math.round(bmp.width * scale); c.height = Math.round(bmp.height * scale);
+  c.getContext("2d")!.drawImage(bmp, 0, 0, c.width, c.height);
+  return c.toDataURL("image/jpeg", 0.6);
+}
 
 /**
  * Identity capture. There is deliberately NO <input type="file"> anywhere in this component:
@@ -153,6 +165,21 @@ export function IdentityCapture({ userId, onDone }: { userId: string; onDone: ()
   async function submit() {
     if (!doc || !consent) return;
     setBusy(true);
+    if (!isSupabaseConfigured) {
+      try {
+        const acc = demoAccounts.byId(userId);
+        if (!acc) throw new Error("no account");
+        const images: Record<string, string> = {};
+        for (const shot of flow) images[shot.key] = await toSmallDataUrl(photos[shot.key].blob);
+        demoIdentity.submit(acc, doc, images);
+        toast.success("تم إرسال هويتك للمراجعة (وضع تجريبي)");
+        onDone();
+      } catch (e) {
+        console.error("demo identity failed", e);
+        toast.error("تعذّر حفظ الصور. حاول مرة أخرى");
+      } finally { setBusy(false); }
+      return;
+    }
     const supabase = createClient();
     const batch = crypto.randomUUID();                       // new folder per attempt; owners cannot overwrite/delete files
     const files: Record<string, string> = {};

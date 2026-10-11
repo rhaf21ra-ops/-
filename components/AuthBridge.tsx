@@ -15,7 +15,7 @@ const IDENTITY_LABEL: Record<string, VerificationStatus | undefined> = {
 /** Keeps the older in-memory store's `currentUser` equal to the real signed-in Supabase user. Renders nothing. */
 export function AuthBridge() {
   const { user, loading } = useAuth();
-  const { setCurrentUser } = useApp();
+  const { setCurrentUser, ensureEntityForUser } = useApp();
 
   useEffect(() => {
     if (loading) return;
@@ -31,7 +31,10 @@ export function AuthBridge() {
       status: user.status as any,
       verificationStatus: IDENTITY_LABEL[user.identityStatus],
     });
-  }, [user, loading, setCurrentUser]);
+    if (["customer", "employee", "merchant", "company"].includes(user.role)) {
+      ensureEntityForUser({ id: user.id, name: user.fullName, email: user.email, phone: user.phone, role: user.role });
+    }
+  }, [user, loading, setCurrentUser, ensureEntityForUser]);
 
   return null;
 }

@@ -5,6 +5,7 @@ import { LogOut, Menu, Bell, X } from "lucide-react"
 import { useState } from "react"
 import { useApp } from "@/lib/store"
 import { useAuth } from "@/lib/auth-context"
+import { canAccess } from "@/lib/permissions"
 import { Button } from "@/components/ui/button"
 import { Sheet, SheetContent, SheetTrigger, SheetClose } from "@/components/ui/sheet"
 import { ROLE_LABELS } from "@/lib/constants"
@@ -19,7 +20,7 @@ interface NavItem {
 
 export function DashboardLayout({
   children,
-  navItems,
+  navItems: allNavItems,
   title,
   role,
 }: {
@@ -29,7 +30,9 @@ export function DashboardLayout({
   role: string
 }) {
   const { currentUser, logout, notifications } = useApp()
-  const { signOut } = useAuth()
+  const { signOut, user: authUser } = useAuth()
+  // Staff only see the pages their permissions allow (owner sees all).
+  const navItems = allNavItems.filter((i) => canAccess(i.href, authUser) || (authUser && !authUser.roles.some((r) => r === "admin" || r.startsWith("staff_")) ))
   const pathname = usePathname()
   const router = useRouter()
   const [open, setOpen] = useState(false)

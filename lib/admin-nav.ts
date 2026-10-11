@@ -1,9 +1,10 @@
 import type { LucideIcon } from "lucide-react";
-import { Home, Users, Store, Building2, Package, ShoppingBag, CreditCard, Wallet, Receipt, BarChart3, Settings, ScrollText, Truck, ShieldCheck } from "lucide-react";
+import { Home, Users, Store, Building2, Package, ShoppingBag, CreditCard, Wallet, Receipt, BarChart3, Settings, ScrollText, Truck, ShieldCheck, KeyRound } from "lucide-react";
 
 export const adminNavItems: { href: string; label: string; icon: LucideIcon }[] = [
   { href: "/admin", label: "الرئيسية", icon: Home },
   { href: "/admin/users", label: "المستخدمون", icon: Users },
+  { href: "/admin/staff", label: "الحسابات والصلاحيات", icon: KeyRound },
   { href: "/admin/merchants", label: "التجار", icon: Store },
   { href: "/admin/companies", label: "الشركات", icon: Building2 },
   { href: "/admin/products", label: "المنتجات", icon: Package },

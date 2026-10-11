@@ -1,6 +1,7 @@
 "use client";
 
 import React, { createContext, useContext, useState, useCallback, useEffect } from "react";
+import { isSupabaseConfigured } from "@/lib/supabase-client";
 import type {
   User,
   Employee,
@@ -63,6 +64,8 @@ interface AppContextType extends AppState {
   // Auth
   login: (email: string, role?: UserRole) => boolean;
   setCurrentUser: (user: User | null) => void;
+  /** Makes sure the signed-in account has the matching merchant / company / employee record so its dashboard works. */
+  ensureEntityForUser: (u: { id: string; name: string; email: string; phone: string; role: string }) => void;
   logout: () => void;
   register: (data: Partial<User> & { role: UserRole }) => void;
   // Cart
@@ -122,6 +125,28 @@ let employeeCounter = 9;
 let verificationCounter = 4;
 let installmentReqCounter = 1005;
 
+function tailNum(id: unknown): number {
+  const m = /(\d+)$/.exec(String(id ?? ""));
+  const n = m ? Number(m[1]) : 0;
+  return n < 10_000_000 ? n : 0; // ignore timestamp-style ids
+}
+const maxTail = (list: { id?: unknown }[]) => list.reduce((a, x) => Math.max(a, tailNum(x.id)), 0);
+const maxNumber = (list: Record<string, any>[], key: string) => list.reduce((a, x) => Math.max(a, tailNum(x[key])), 0);
+
+/** After loading saved demo data, make sure new ids never collide with saved ones. */
+function resyncCounters(st: AppState) {
+  orderCounter = Math.max(orderCounter, maxNumber(st.orders, "orderNumber") + 1);
+  appCounter = Math.max(appCounter, maxNumber(st.installmentApplications, "applicationNumber") + 1);
+  paymentCounter = Math.max(paymentCounter, maxNumber(st.payments, "paymentNumber") + 1);
+  contractCounter = Math.max(contractCounter, maxNumber(st.installmentContracts, "contractNumber") + 1);
+  productCounter = Math.max(productCounter, maxTail(st.products) + 1);
+  notifCounter = Math.max(notifCounter, maxTail(st.notifications) + 1);
+  auditCounter = Math.max(auditCounter, maxTail(st.auditLogs) + 1);
+  employeeCounter = Math.max(employeeCounter, maxTail(st.employees) + 1);
+  verificationCounter = Math.max(verificationCounter, maxTail(st.identityVerifications) + 1);
+  installmentReqCounter = Math.max(installmentReqCounter, maxNumber(st.installmentRequests, "requestNumber") + 1);
+}
+
 function daysAgo(days: number): string {
   const d = new Date();
   d.setDate(d.getDate() - days);
@@ -158,35 +183,52 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
     cart: [],
   });
 
-  // Persist current user and cart to localStorage
+  const [hydrated, setHydrated] = useState(false);
+
+  // Persist current user, cart and (demo mode) the whole demo data set to localStorage
   useEffect(() => {
     try {
       const savedUser = localStorage.getItem("soq-user");
       const savedCart = localStorage.getItem("soq-cart");
-      if (savedUser) {
-        setState(prev => ({ ...prev, currentUser: JSON.parse(savedUser) }));
-      }
-      if (savedCart) {
-        setState(prev => ({ ...prev, cart: JSON.parse(savedCart) }));
-      }
+      const savedData = isSupabaseConfigured ? null : localStorage.getItem("qistuha-demo-data");
+      setState(prev => {
+        let next = prev;
+        if (savedData) {
+          const d = JSON.parse(savedData);
+          next = { ...prev, ...d, currentUser: prev.currentUser, cart: prev.cart };
+          resyncCounters(next);
+        }
+        if (savedUser) next = { ...next, currentUser: JSON.parse(savedUser) };
+        if (savedCart) next = { ...next, cart: JSON.parse(savedCart) };
+        return next;
+      });
     } catch {}
+    setHydrated(true);
   }, []);
+
+  useEffect(() => {
+    if (!hydrated || isSupabaseConfigured) return;
+    try {
+      const { currentUser, cart, ...data } = state;
+      localStorage.setItem("qistuha-demo-data", JSON.stringify(data));
+    } catch {}
+  }, [state, hydrated]);
 
   useEffect(() => {
     try {
       if (state.currentUser) {
         localStorage.setItem("soq-user", JSON.stringify(state.currentUser));
-      } else {
+      } else if (hydrated) {
         localStorage.removeItem("soq-user");
       }
     } catch {}
-  }, [state.currentUser]);
+  }, [state.currentUser, hydrated]);
 
   useEffect(() => {
     try {
-      localStorage.setItem("soq-cart", JSON.stringify(state.cart));
+      if (hydrated) localStorage.setItem("soq-cart", JSON.stringify(state.cart));
     } catch {}
-  }, [state.cart]);
+  }, [state.cart, hydrated]);
 
   const addAuditLog = useCallback((log: Omit<AuditLog, "id" | "timestamp">) => {
     setState(prev => ({
@@ -219,6 +261,27 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
 
   const setCurrentUser = useCallback((user: User | null) => {
     setState(prev => ({ ...prev, currentUser: user }));
+  }, []);
+
+  const ensureEntityForUser = useCallback((u: { id: string; name: string; email: string; phone: string; role: string }) => {
+    setState(prev => {
+      const now = new Date().toISOString();
+      let next = prev;
+      if (!prev.users.some(x => x.id === u.id)) {
+        next = { ...next, users: [...next.users, { id: u.id, email: u.email, name: u.name, role: u.role as UserRole, phone: u.phone, createdAt: now }] };
+      }
+      if (u.role === "merchant" && !prev.merchants.some(m => m.userId === u.id)) {
+        next = { ...next, merchants: [...next.merchants, { id: `m-${u.id}`, userId: u.id, storeName: `متجر ${u.name}`, ownerName: u.name, phone: u.phone, email: u.email, city: "", address: "", status: "قيد المراجعة", rating: 0, salesTotal: 0, createdAt: now }] };
+      }
+      if (u.role === "company" && !prev.companies.some(c => c.userId === u.id)) {
+        next = { ...next, companies: [...next.companies, { id: `c-${u.id}`, userId: u.id, name: `شركة ${u.name}`, contactName: u.name, phone: u.phone, email: u.email, employeeCount: 0, city: "", status: "قيد المراجعة", createdAt: now }] };
+      }
+      if (u.role === "employee" && !prev.employees.some(e => e.userId === u.id)) {
+        const company = prev.companies.find(c => c.status === "نشط") ?? prev.companies[0];
+        next = { ...next, employees: [...next.employees, { id: `e-${employeeCounter++}`, userId: u.id, name: u.name, employeeNumber: `EMP-${employeeCounter}`, phone: u.phone, email: u.email, companyId: company?.id ?? "", jobTitle: "", salary: 0, hireDate: now, status: "نشط", eligibility: "قيد المراجعة", installmentLimit: 0, usedLimit: 0, city: "" }] };
+      }
+      return next;
+    });
   }, []);
 
   const logout = useCallback(() => {
@@ -895,6 +958,7 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
     ...state,
     login,
     setCurrentUser,
+    ensureEntityForUser,
     logout,
     register,
     addToCart,

@@ -9,6 +9,7 @@ import { Header } from "@/components/layout/header"
 import { Footer } from "@/components/layout/footer"
 import { BottomNav } from "@/components/layout/bottom-nav"
 import { AuthBridge } from "@/components/AuthBridge"
+import { RouteGuard } from "@/components/RouteGuard"
 import { BRAND } from "@/lib/brand"
 
 export const metadata: Metadata = {
@@ -30,7 +31,7 @@ export default function RootLayout({ children }: { children: React.ReactNode }) 
             <AuthBridge />
             <ToastProvider>
             <Header />
-            <main className="flex-1 pb-16 md:pb-0">{children}</main>
+            <main className="flex-1 pb-16 md:pb-0"><RouteGuard>{children}</RouteGuard></main>
             <Footer />
             <BottomNav />
             <Toaster />

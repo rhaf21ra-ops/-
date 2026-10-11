@@ -60,7 +60,7 @@ function LoginContent() {
               <CardTitle className="text-2xl">تسجيل الدخول</CardTitle>
               <p className="text-sm text-muted-foreground">مرحباً بك في {BRAND.name}</p>
               {!isSupabaseConfigured && (
-                <p className="mt-2 rounded-lg bg-amber-50 p-2 text-xs text-amber-800">الموقع غير مربوط بقاعدة البيانات بعد. أضف مفاتيح Supabase في إعدادات Netlify ثم أعد النشر.</p>
+                <p className="mt-2 rounded-lg bg-amber-50 p-2 text-xs text-amber-800">وضع تجريبي: أنشئ حساباً جديداً وجرّب كل الصلاحيات، والبيانات محفوظة في هذا المتصفح فقط. دخول المالك والموظفين من صفحة دخول الإدارة.</p>
               )}
             </CardHeader>
             <CardContent className="space-y-4">
@@ -75,7 +75,7 @@ function LoginContent() {
                   <Label className="mb-1.5 block">البريد الإلكتروني</Label>
                   <div className="relative">
                     <Mail className="absolute right-3 top-1/2 -translate-y-1/2 h-4 w-4 text-muted-foreground" />
-                    <Input type="email" value={email} onChange={e => setEmail(e.target.value)} placeholder="example@demo.com" className="pr-10" required dir="ltr" />
+                    <Input type="email" value={email} onChange={e => setEmail(e.target.value)} placeholder="name@example.com" className="pr-10" required dir="ltr" />
                   </div>
                 </div>
                 <div>

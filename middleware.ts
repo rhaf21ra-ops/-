@@ -14,9 +14,9 @@ const PROTECTED: Record<string, string> = {
 
 export async function middleware(request: NextRequest) {
   // Not configured yet (no Supabase variables on the host): let every page open instead of failing with a 500.
-  if (!process.env.NEXT_PUBLIC_SUPABASE_URL || !process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY) return NextResponse.next();
+  if (!process.env.NEXT_PUBLIC_SUPABASE_URL || !(process.env.NEXT_PUBLIC_SUPABASE_PUBLISHABLE_KEY || process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY)) return NextResponse.next();
   let response = NextResponse.next({ request });
-  const supabase = createServerClient(process.env.NEXT_PUBLIC_SUPABASE_URL!, process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY!, {
+  const supabase = createServerClient(process.env.NEXT_PUBLIC_SUPABASE_URL!, (process.env.NEXT_PUBLIC_SUPABASE_PUBLISHABLE_KEY || process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY)!, {
     cookies: {
       getAll: () => request.cookies.getAll(),
       setAll: (list) => {
@@ -42,7 +42,9 @@ export async function middleware(request: NextRequest) {
   const { data } = await supabase.from("user_roles").select("roles(name)").eq("user_id", user.id);
   const roles = (data ?? []).flatMap((r: any) => (Array.isArray(r.roles) ? r.roles : [r.roles]).map((x: any) => x?.name));
   // /staff is open to any staff_* role; the owner (/admin) is the only one who may also enter it.
-  const allowed = prefix === "/staff" ? roles.some((r: string) => r?.startsWith("staff_") || r === "admin") : roles.includes(PROTECTED[prefix]);
+  // /staff and /admin are open to the owner and to any staff role; exact page access is decided per permission by RouteGuard, and data by RLS.
+  const staffOrOwner = roles.some((r: string) => r?.startsWith("staff_") || r === "admin");
+  const allowed = prefix === "/staff" || prefix === "/admin" ? staffOrOwner : roles.includes(PROTECTED[prefix]);
   if (!allowed) {
     const url = request.nextUrl.clone();
     url.pathname = "/";

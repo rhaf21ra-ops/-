@@ -122,7 +122,7 @@ function RegisterContent() {
                       <div className="grid sm:grid-cols-2 gap-4">
                         <Field label="الاسم الكامل *" icon={User} value={formData.name || ""} onChange={v => update("name", v)} placeholder="الاسم الكامل" required />
                         <Field label="رقم الهاتف *" icon={Phone} value={formData.phone || ""} onChange={v => update("phone", v)} placeholder="07XXXXXXXX" dir="ltr" required />
-                        <Field label="البريد الإلكتروني *" icon={Mail} value={formData.email || ""} onChange={v => update("email", v)} placeholder="example@demo.com" dir="ltr" required />
+                        <Field label="البريد الإلكتروني *" icon={Mail} value={formData.email || ""} onChange={v => update("email", v)} placeholder="name@example.com" dir="ltr" required />
                         <div>
                           <Label className="mb-1.5 block">المدينة</Label>
                           <Select value={formData.city || ""} onValueChange={v => update("city", v)}>
@@ -140,7 +140,7 @@ function RegisterContent() {
                       <div className="grid sm:grid-cols-2 gap-4">
                         <Field label="الاسم الكامل *" icon={User} value={formData.name || ""} onChange={v => update("name", v)} placeholder="الاسم الكامل" required />
                         <Field label="رقم الهاتف *" icon={Phone} value={formData.phone || ""} onChange={v => update("phone", v)} placeholder="07XXXXXXXX" dir="ltr" required />
-                        <Field label="البريد الإلكتروني *" icon={Mail} value={formData.email || ""} onChange={v => update("email", v)} placeholder="example@demo.com" dir="ltr" required />
+                        <Field label="البريد الإلكتروني *" icon={Mail} value={formData.email || ""} onChange={v => update("email", v)} placeholder="name@example.com" dir="ltr" required />
                         <div>
                           <Label className="mb-1.5 block">الشركة</Label>
                           <Select value={formData.company || ""} onValueChange={v => update("company", v)}>
@@ -174,7 +174,7 @@ function RegisterContent() {
                         <Field label="اسم المتجر *" icon={Building} value={formData.name || ""} onChange={v => update("name", v)} placeholder="اسم المتجر" required />
                         <Field label="اسم المسؤول *" icon={User} value={formData.ownerName || ""} onChange={v => update("ownerName", v)} placeholder="اسم المسؤول" required />
                         <Field label="رقم الهاتف *" icon={Phone} value={formData.phone || ""} onChange={v => update("phone", v)} placeholder="07XXXXXXXX" dir="ltr" required />
-                        <Field label="البريد الإلكتروني *" icon={Mail} value={formData.email || ""} onChange={v => update("email", v)} placeholder="example@demo.com" dir="ltr" required />
+                        <Field label="البريد الإلكتروني *" icon={Mail} value={formData.email || ""} onChange={v => update("email", v)} placeholder="name@example.com" dir="ltr" required />
                         <div>
                           <Label className="mb-1.5 block">المدينة *</Label>
                           <Select value={formData.city || ""} onValueChange={v => update("city", v)}>
@@ -194,7 +194,7 @@ function RegisterContent() {
                         <Field label="اسم الشركة *" icon={Building} value={formData.name || ""} onChange={v => update("name", v)} placeholder="اسم الشركة" required />
                         <Field label="اسم المسؤول *" icon={User} value={formData.contactName || ""} onChange={v => update("contactName", v)} placeholder="اسم المسؤول" required />
                         <Field label="رقم الهاتف *" icon={Phone} value={formData.phone || ""} onChange={v => update("phone", v)} placeholder="07XXXXXXXX" dir="ltr" required />
-                        <Field label="البريد الإلكتروني *" icon={Mail} value={formData.email || ""} onChange={v => update("email", v)} placeholder="example@demo.com" dir="ltr" required />
+                        <Field label="البريد الإلكتروني *" icon={Mail} value={formData.email || ""} onChange={v => update("email", v)} placeholder="name@example.com" dir="ltr" required />
                         <Field label="عدد الموظفين" icon={User} value={formData.employeeCount || ""} onChange={v => update("employeeCount", v)} placeholder="مثلاً: 50" type="number" />
                         <div>
                           <Label className="mb-1.5 block">المدينة *</Label>
