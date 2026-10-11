@@ -44,6 +44,10 @@ insert into auth.users(id, raw_user_meta_data) values
  (:c1, '{"role":"customer","full_name":"Cust"}'),   (:s1, '{"role":"customer","full_name":"StaffFin"}'),
  (:s2, '{"role":"customer","full_name":"StaffMer"}'),(:co1, '{"role":"company","full_name":"Co1"}'),
  (:co2, '{"role":"company","full_name":"Co2"}'),    (:x1, '{"role":"admin","full_name":"Attacker"}');
+-- 0013 sign-up creates merchant/company rows itself; this fixture builds its own, so clear the automatic ones
+delete from stores where merchant_id in (select id from merchants where owner_id = :mer);
+delete from merchants where owner_id = :mer;
+delete from companies where owner_id in (:co1, :co2);
 insert into user_roles select :own, id from roles where name = 'admin';
 insert into user_roles select :s1, id from roles where name = 'staff_financing';
 insert into user_roles select :s2, id from roles where name = 'staff_merchants';
