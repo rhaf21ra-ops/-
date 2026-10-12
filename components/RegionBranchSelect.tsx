@@ -1,7 +1,7 @@
 "use client";
 
 import { MapPin } from "lucide-react";
-import { BRANCH_REGIONS, branchesInRegion } from "@/lib/branches";
+import { getBranchRegions, branchesInRegion } from "@/lib/branches";
 
 /**
  * Region first, then only that region's branches. Both values are required before an installment
@@ -27,7 +27,7 @@ export function RegionBranchSelect({
       <div>
         <p className="mb-2 text-sm text-muted-foreground">1. اختر المنطقة</p>
         <div className="flex flex-wrap gap-2">
-          {BRANCH_REGIONS.map((r) => (
+          {getBranchRegions().map((r) => (
             <button
               key={r}
               type="button"

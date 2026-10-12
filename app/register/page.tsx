@@ -47,7 +47,7 @@ function RegisterContent() {
     setLoading(true);
     const { error, userId } = await signUp(formData.email, formData.password, formData.name, formData.phone, role as AuthUserRole);
     if (error) {
-      toast.error("فشل إنشاء الحساب", { description: error });
+      toast.error("فشل إنشاء الحساب", { description: error + " (لتشخيص الاتصال افتح /status)" });
       setLoading(false);
       return;
     }

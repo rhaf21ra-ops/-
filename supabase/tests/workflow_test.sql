@@ -79,6 +79,7 @@ select t.chk('employee places installment order', t.run_as(:emp::uuid,
   '________-____-____-____-____________');
 select t.chk('order under_review', (select status from orders where user_id=:emp), 'under_review');
 insert into t.ids select 'app_emp', id from financing_applications where applicant_user_id=:emp;
+select t.chk('application snapshot for company view', (select product_summary || '/' || applicant_name || '/' || company_name || '/' || merchant_summary from financing_applications where applicant_user_id=:emp), 'Phone/Emp/Al Amal/Tech Store');
 select t.chk('admin cannot decide before company', t.run_as(:own::uuid, $q$ select decide_application((select v from t.ids where k='app_emp'), true)::text $q$), 'ERROR%not waiting for the platform%');
 select t.chk('customer cannot decide as company', t.run_as(:cus::uuid, $q$ select company_decide_application((select v from t.ids where k='app_emp'), true)::text $q$), 'ERROR%not allowed%');
 select t.chk('company approves', t.run_as(:com::uuid, $q$ select company_decide_application((select v from t.ids where k='app_emp'), true, 'ok')::text $q$), '');

@@ -377,3 +377,30 @@ create policy merchant_orders on orders for select using (_merchant_has_order(id
 create policy staff_commissions_fin on commissions for select using (has_permission('financing.view'));
 create policy own_company_employees_profiles on user_profiles for select using (exists (
   select 1 from employees e join companies c on c.id = e.company_id where e.user_id = user_profiles.id and c.owner_id = auth.uid()));
+
+-- ═════════ 11. Application snapshot (so a company can see WHAT its employee orders without reading the order) ═════════
+alter table financing_applications add column if not exists product_summary text;
+alter table financing_applications add column if not exists merchant_summary text;
+alter table financing_applications add column if not exists applicant_name text;
+alter table financing_applications add column if not exists company_name text;
+
+create or replace function fill_application_summary() returns trigger
+language plpgsql security definer set search_path = public as $$
+declare names text; mers text; n int;
+begin
+  if new.order_id is not null then
+    select string_agg(p.name, '، ' order by p.name), string_agg(distinct coalesce(m.store_name, m.business_name), '، '), count(*)
+      into names, mers, n
+      from order_items i join products p on p.id = i.product_id left join merchants m on m.id = i.merchant_id
+     where i.order_id = new.order_id;
+    new.product_summary := names;
+    new.merchant_summary := mers;
+  end if;
+  select full_name into new.applicant_name from user_profiles where id = coalesce(new.applicant_user_id, (select user_id from employees where id = new.employee_id));
+  if new.company_id is not null then select name into new.company_name from companies where id = new.company_id; end if;
+  return new;
+end $$;
+drop trigger if exists trg_fill_application_summary on financing_applications;
+-- fires after financing_before_insert (alphabetical order) so applicant_user_id is already set
+create trigger trg_zz_fill_application_summary before insert on financing_applications
+  for each row execute function fill_application_summary();

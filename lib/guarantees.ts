@@ -5,7 +5,7 @@ import type { GuaranteeType } from "@/components/GuaranteeSelect";
  * Cash payment never asks for a guarantee. The field lists are the working set for this build;
  * when the database is connected, the `guarantee_types` table (migration 0005) becomes the source.
  */
-export const GUARANTEE_TYPES: GuaranteeType[] = [
+const STATIC_GUARANTEE_TYPES: GuaranteeType[] = [
   {
     id: 1,
     code: "account",
@@ -53,6 +53,10 @@ export const GUARANTEE_TYPES: GuaranteeType[] = [
     fields: [],
   },
 ];
+
+let GUARANTEE_TYPES: GuaranteeType[] = STATIC_GUARANTEE_TYPES;
+/** Real mode: the database table `guarantee_types` replaces the bundled list. */
+export function setGuaranteeTypes(list: GuaranteeType[]) { if (list.length) GUARANTEE_TYPES = list; }
 
 /** Platform-wide default. A company can be switched off individually via `companyGuaranteeAllowed`. */
 export const COMPANY_GUARANTEE_PLATFORM_DEFAULT = true;

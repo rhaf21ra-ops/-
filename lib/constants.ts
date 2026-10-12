@@ -72,6 +72,7 @@ export const ORDER_STATUSES = [
 export type OrderStatus = (typeof ORDER_STATUSES)[number];
 
 export const INSTALLMENT_STATUSES = [
+  "بانتظار الشركة",
   "جديد",
   "قيد المراجعة",
   "مقبول",
