@@ -65,6 +65,12 @@ select t.chk('merchant inserts own product', t.run_as(:mer::uuid, $q$ insert int
    values ((select s.id from stores s join merchants m on m.id=s.merchant_id where m.owner_id='c0000000-0000-0000-0000-000000000002'),
            (select id from merchants where owner_id='c0000000-0000-0000-0000-000000000002'),'Phone',100000,10,'[{"label":"RAM","value":"8"}]',(select id from categories where name='الهواتف')) returning name $q$), 'Phone');
 select t.chk('merchant cannot feature own product', t.run_as(:mer::uuid, $q$ update products set featured=true where name='Phone' returning featured::text $q$), 'false');
+
+select t.chk('public sees active merchant product', t.run_as(:cus::uuid, $q$ select count(*)::text from products $q$), '1');
+update merchants set status='suspended' where owner_id=:mer;
+select t.chk('suspended merchant product is hidden from the public', t.run_as(:cus::uuid, $q$ select count(*)::text from products $q$), '0');
+select t.chk('...but the merchant still sees it', t.run_as(:mer::uuid, $q$ select count(*)::text from products $q$), '1');
+update merchants set status='active' where owner_id=:mer;
 select t.chk('customer cannot join a company', t.run_as(:cus::uuid, $q$ select join_company((select id from companies_public limit 1))::text $q$), 'ERROR%only employee%');
 select t.chk('employee joins', t.run_as(:emp::uuid, $q$ select (join_company((select id from companies_public limit 1),'Engineer','E-1') is not null)::text $q$), 'true');
 select t.chk('employee starts pending with zero limit', (select eligibility || '/' || installment_limit from employees where user_id=:emp), 'pending/0.00');

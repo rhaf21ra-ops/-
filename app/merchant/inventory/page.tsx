@@ -21,7 +21,7 @@ const navItems: { href: string; label: string; icon: LucideIcon }[] = [
 ];
 
 export default function MerchantInventoryPage() {
-  const { currentUser, merchants, products, updateProduct } = useApp();
+  const { currentUser, merchants, products, updateProduct, isReal } = useApp();
   const merchant = merchants.find(m => m.userId === currentUser?.id);
   const myProducts = products.filter(p => p.merchantId === merchant?.id);
 
@@ -81,7 +81,7 @@ export default function MerchantInventoryPage() {
                           const val = Number(e.target.value);
                           if (val !== p.stock) {
                             updateProduct(p.id, { stock: val });
-                            toast.success("تم تحديث المخزون");
+                            if (!isReal) toast.success("تم تحديث المخزون");
                           }
                         }}
                       />

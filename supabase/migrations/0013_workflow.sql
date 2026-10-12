@@ -404,3 +404,11 @@ drop trigger if exists trg_fill_application_summary on financing_applications;
 -- fires after financing_before_insert (alphabetical order) so applicant_user_id is already set
 create trigger trg_zz_fill_application_summary before insert on financing_applications
   for each row execute function fill_application_summary();
+
+-- ═════════ 12. Products of a pending / suspended merchant are not public ═════════
+create or replace function _store_is_public(p_store uuid) returns boolean
+language sql stable security definer set search_path = public as $$
+  select exists (select 1 from stores s join merchants m on m.id = s.merchant_id where s.id = p_store and m.status = 'active');
+$$;
+drop policy if exists public_read on products;
+create policy public_read on products for select using (active and _store_is_public(store_id));

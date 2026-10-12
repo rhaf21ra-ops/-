@@ -78,7 +78,7 @@ const PAYMENT_METHODS = [
 export default function InstallmentDetailPage() {
   const params = useParams();
   const router = useRouter();
-  const { installmentContracts, installmentApplications, recordPayment } =
+  const { installmentContracts, installmentApplications, recordPayment, isReal } =
     useApp();
   const { toast } = useToast();
 
@@ -229,6 +229,9 @@ export default function InstallmentDetailPage() {
                   {new Date(nextDuePayment.dueDate).toLocaleDateString("ar-YE")}
                 </p>
               </div>
+              {isReal ? (
+                <p className="max-w-xs text-xs text-muted-foreground">يسجّل فريق المنصة السداد بعد استقطاعه من راتبك أو دفعه في الفرع، وسيظهر هنا فور تسجيله.</p>
+              ) : (
               <Dialog open={payOpen} onOpenChange={setPayOpen}>
                 <DialogTrigger asChild>
                   <Button className="gap-2">
@@ -286,6 +289,7 @@ export default function InstallmentDetailPage() {
                   </DialogFooter>
                 </DialogContent>
               </Dialog>
+              )}
             </div>
           )}
 

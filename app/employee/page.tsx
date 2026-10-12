@@ -24,6 +24,7 @@ import {
   TableRow,
 } from "@/components/ui/table";
 import { useApp } from "@/lib/store";
+import { JoinCompany } from "@/components/JoinCompany";
 import { formatCurrency } from "@/lib/brand";
 import {
   Home,
@@ -59,6 +60,7 @@ export default function EmployeeDashboardPage() {
     orders,
     installmentContracts,
     identityVerifications,
+    isReal,
   } = useApp();
 
   const employee = employees.find((e) => e.userId === currentUser?.id);
@@ -113,6 +115,7 @@ export default function EmployeeDashboardPage() {
       title="لوحة الموظف"
       role="employee"
     >
+      {isReal && currentUser && !employee && <JoinCompany />}
       {/* Welcome */}
       <div className="mb-6">
         <h1 className="text-2xl font-bold">

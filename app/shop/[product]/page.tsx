@@ -28,7 +28,7 @@ import {
 export default function ProductDetailPage() {
   const params = useParams();
   const router = useRouter();
-  const { products, addToCart, currentUser, createInstallmentRequest } = useApp();
+  const { products, addToCart, currentUser, createInstallmentRequest, isReal } = useApp();
   const product = products.find(p => p.id === params.product);
 
   const [selectedImage, setSelectedImage] = useState(0);
@@ -104,6 +104,16 @@ export default function ProductDetailPage() {
 
   const submitInstallmentRequest = () => {
     if (!currentUser || !product) return;
+    if (isReal) {
+      // Real mode: an installment request is an order with a guarantee and a branch, completed at checkout.
+      addToCart({
+        productId: product.id, productName: product.name, productImage: product.images[0] || "", merchantId: product.merchantId,
+        merchantName: product.merchantName, quantity, cashPrice: product.cashPrice, deferredPrice: product.deferredPrice,
+        paymentType: "تقسيط", durationMonths: duration,
+      });
+      router.push("/checkout");
+      return;
+    }
     const req = createInstallmentRequest({
       userId: currentUser.id,
       userName: currentUser.name,

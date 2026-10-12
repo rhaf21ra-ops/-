@@ -120,7 +120,7 @@ export async function loadSnapshot(userId: string | null): Promise<Snapshot> {
 
   const merchants: Merchant[] = merchRows.map((m) => ({
     id: m.id, userId: m.owner_id, storeName: m.store_name || m.business_name, ownerName: m.owner_name || "", phone: "", email: "", city: "", address: "",
-    status: MERCHANT_AR[m.status] ?? "قيد المراجعة", rating: num(m.rating), salesTotal: num(m.sales_total), createdAt: m.created_at,
+    status: MERCHANT_AR[m.status] ?? "قيد المراجعة", rating: num(m.rating), salesTotal: num(m.sales_total), commissionPercent: m.commission_percent ?? undefined, createdAt: m.created_at,
   }));
   for (const m of merchPub) if (!merchants.some((x) => x.id === m.id)) {
     merchants.push({ id: m.id, userId: "", storeName: m.store_name || m.business_name, ownerName: "", phone: "", email: "", city: "", address: "", status: "نشط", rating: num(m.rating), salesTotal: 0, createdAt: "" });
@@ -138,7 +138,9 @@ export async function loadSnapshot(userId: string | null): Promise<Snapshot> {
   const companiesRaw: Row[] = [...compRows];
   for (const c of compPub) if (!companiesRaw.some((x) => x.id === c.id)) companiesRaw.push({ ...c, status: "active", owner_id: "" });
 
-  const products: Product[] = prodRows.map((p) => {
+  // A pending or suspended merchant's catalogue is hidden from everyone except that merchant and the platform.
+  const visibleMerchants = new Set<string>([...merchRows.map((m) => m.id), ...merchPub.map((m) => m.id)]);
+  const products: Product[] = prodRows.filter((p) => visibleMerchants.has(p.merchant_id || one<Row>(p.stores)?.merchant_id)).map((p) => {
     const store = one<Row>(p.stores);
     const price = Math.round(num(p.cash_price) * (1 - num(p.discount_percent) / 100));
     const mid = p.merchant_id || store?.merchant_id || "";
@@ -408,7 +410,7 @@ export const db = {
             const ext = blob.type === "image/png" ? "png" : blob.type === "image/webp" ? "webp" : "jpg";
             const path = `${mid}/${productId}/${crypto.randomUUID()}.${ext}`;
             const up = await supabase.storage.from("product-images").upload(path, blob, { contentType: blob.type, upsert: false });
-            if (up.error) return { ok: false, error: "تعذّر رفع إحدى الصور (الحجم الأقصى 5 ميجابايت، JPG أو PNG أو WebP)" };
+            if (up.error) return { ok: false, error: /row-level|policy|permission/i.test(up.error.message) ? "متجرك لم يُفعَّل بعد من الإدارة، فلا يمكن رفع الصور قبل التفعيل" : "تعذّر رفع إحدى الصور (الحجم الأقصى 5 ميجابايت، JPG أو PNG أو WebP)" };
             rows.push({ product_id: productId, storage_path: path, position: pos++ });
           } else {
             const hit = (existing ?? []).find((e) => publicImage(e) === src);

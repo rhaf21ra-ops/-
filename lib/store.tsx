@@ -1,7 +1,11 @@
 "use client";
 
-import React, { createContext, useContext, useState, useCallback, useEffect } from "react";
+import React, { createContext, useContext, useState, useCallback, useEffect, useRef } from "react";
 import { isSupabaseConfigured } from "@/lib/supabase-client";
+import { toast } from "sonner";
+import { loadSnapshot, db, installmentIndex, ORDER_DB, DELIVERY_DB, type Result } from "@/lib/real-data";
+import { setBranches } from "@/lib/branches";
+import { setGuaranteeTypes } from "@/lib/guarantees";
 import type {
   User,
   Employee,
@@ -66,6 +70,19 @@ interface AppContextType extends AppState {
   setCurrentUser: (user: User | null) => void;
   /** Makes sure the signed-in account has the matching merchant / company / employee record so its dashboard works. */
   ensureEntityForUser: (u: { id: string; name: string; email: string; phone: string; role: string }) => void;
+  /** True when connected to Supabase (real data). False = browser-only demo data. */
+  isReal: boolean;
+  /** Real mode: reload everything the signed-in user may see. */
+  refresh: () => Promise<void>;
+  /** Real mode: percent added to the cash price for installments (platform default or the owner's per-user override). */
+  markup: number;
+  /** Real mode checkout: creates the order (and installment application) on the server. */
+  placeOrder: (p: Parameters<typeof db.placeOrder>[0]) => Promise<Result>;
+  /** Real mode: an employee picks the company they work for. */
+  joinCompany: (companyId: string, job?: string, number?: string) => Promise<Result>;
+  setMerchantStatus: (id: string, status: "نشط" | "قيد المراجعة" | "موقوف") => Promise<boolean>;
+  setCompanyStatus: (id: string, status: "نشط" | "قيد المراجعة" | "موقوف") => Promise<boolean>;
+  setMerchantCommission: (id: string, percent: number) => Promise<boolean>;
   logout: () => void;
   register: (data: Partial<User> & { role: UserRole }) => void;
   // Cart
@@ -78,36 +95,36 @@ interface AppContextType extends AppState {
   cartCount: number;
   // Orders
   createOrder: (order: Omit<Order, "id" | "orderNumber" | "createdAt">) => Order;
-  updateOrderStatus: (orderId: string, status: Order["status"]) => void;
+  updateOrderStatus: (orderId: string, status: Order["status"]) => void | Promise<boolean>;
   // Installments
   createInstallmentApplication: (app: Omit<InstallmentApplication, "id" | "applicationNumber" | "createdAt" | "status">) => InstallmentApplication;
-  reviewInstallmentApplication: (id: string, approved: boolean, rejectionReason?: string) => void;
+  reviewInstallmentApplication: (id: string, approved: boolean, rejectionReason?: string) => void | Promise<boolean>;
   // Payments
-  recordPayment: (contractId: string, amount: number, method: string, installmentNumber?: number) => void;
+  recordPayment: (contractId: string, amount: number, method: string, installmentNumber?: number) => void | Promise<boolean>;
   // Products
-  addProduct: (product: Omit<Product, "id" | "createdAt" | "rating" | "reviewsCount" | "soldCount">) => void;
-  updateProduct: (id: string, updates: Partial<Product>) => void;
-  deleteProduct: (id: string) => void;
+  addProduct: (product: Omit<Product, "id" | "createdAt" | "rating" | "reviewsCount" | "soldCount">) => void | Promise<boolean>;
+  updateProduct: (id: string, updates: Partial<Product>) => void | Promise<boolean>;
+  deleteProduct: (id: string) => void | Promise<boolean>;
   // Notifications
   addNotification: (notif: Omit<Notification, "id" | "createdAt" | "read">) => void;
   markNotificationRead: (id: string) => void;
   // Employees (company management)
-  addEmployee: (emp: Omit<Employee, "id">) => void;
-  updateEmployee: (id: string, updates: Partial<Employee>) => void;
+  addEmployee: (emp: Omit<Employee, "id">) => void | Promise<boolean>;
+  updateEmployee: (id: string, updates: Partial<Employee>) => void | Promise<boolean>;
   // Audit
   addAuditLog: (log: Omit<AuditLog, "id" | "timestamp">) => void;
   // Deliveries
-  updateDeliveryStatus: (id: string, status: Delivery["status"]) => void;
+  updateDeliveryStatus: (id: string, status: Delivery["status"]) => void | Promise<boolean>;
   // Settlements
-  updateSettlementStatus: (id: string, status: Settlement["status"]) => void;
+  updateSettlementStatus: (id: string, status: Settlement["status"]) => void | Promise<boolean>;
   // Identity Verification
   submitIdentityVerification: (data: Omit<IdentityVerification, "id" | "submittedAt" | "status">) => void;
   reviewIdentityVerification: (id: string, status: VerificationStatus, notes?: string) => void;
   // Installment Requests
   createInstallmentRequest: (req: Omit<InstallmentRequest, "id" | "requestNumber" | "createdAt" | "status">) => InstallmentRequest;
   reviewInstallmentRequest: (id: string, approved: boolean, rejectionReason?: string) => void;
-  companyApproveFinancing: (id: string, notes?: string) => void;
-  companyRejectFinancing: (id: string, notes?: string) => void;
+  companyApproveFinancing: (id: string, notes?: string) => void | Promise<boolean>;
+  companyRejectFinancing: (id: string, notes?: string) => void | Promise<boolean>;
   // Identity Access Audit
   logIdentityAccess: (verificationId: string, userName: string) => void;
 }
@@ -154,7 +171,13 @@ function daysAgo(days: number): string {
 }
 
 export function AppProvider({ children }: { children: React.ReactNode }) {
-  const [state, setState] = useState<AppState>({
+  const real = isSupabaseConfigured;
+  const [markup, setMarkup] = useState(22);
+  const [state, setState] = useState<AppState>(real ? {
+    currentUser: null, users: [], employees: [], companies: [], merchants: [], products: [], orders: [], installmentApplications: [],
+    installmentContracts: [], payments: [], settlements: [], deliveries: [], notifications: [], auditLogs: [], identityVerifications: [],
+    installmentRequests: [], cart: [],
+  } : {
     currentUser: null,
     users: seedUsers,
     employees: seedEmployees,
@@ -198,7 +221,7 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
           next = { ...prev, ...d, currentUser: prev.currentUser, cart: prev.cart };
           resyncCounters(next);
         }
-        if (savedUser) next = { ...next, currentUser: JSON.parse(savedUser) };
+        if (savedUser && !isSupabaseConfigured) next = { ...next, currentUser: JSON.parse(savedUser) };
         if (savedCart) next = { ...next, cart: JSON.parse(savedCart) };
         return next;
       });
@@ -216,7 +239,9 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
 
   useEffect(() => {
     try {
-      if (state.currentUser) {
+      if (isSupabaseConfigured) {
+        localStorage.removeItem("soq-user"); // real mode: the Supabase session is the only source of truth
+      } else if (state.currentUser) {
         localStorage.setItem("soq-user", JSON.stringify(state.currentUser));
       } else if (hydrated) {
         localStorage.removeItem("soq-user");
@@ -230,7 +255,47 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
     } catch {}
   }, [state.cart, hydrated]);
 
+  const stateRef = useRef(state);
+  stateRef.current = state;
+
+  const refresh = useCallback(async () => {
+    if (!isSupabaseConfigured) return;
+    try {
+      const snap = await loadSnapshot(stateRef.current.currentUser?.id ?? null);
+      setBranches(snap.branches);
+      setGuaranteeTypes(snap.guaranteeTypes);
+      setMarkup(snap.markup);
+      const { markup: _m, branches: _b, guaranteeTypes: _g, ...data } = snap;
+      setState(prev => ({ ...prev, ...data, currentUser: prev.currentUser, cart: prev.cart, identityVerifications: prev.identityVerifications }));
+    } catch (e) {
+      console.warn("refresh failed", e);
+    }
+  }, []);
+
+  // Real mode: load on start, whenever the signed-in user changes, on focus and every 45 s.
+  useEffect(() => {
+    if (!isSupabaseConfigured || !hydrated) return;
+    refresh();
+  }, [state.currentUser?.id, hydrated, refresh]);
+  useEffect(() => {
+    if (!isSupabaseConfigured) return;
+    const t = setInterval(() => { if (document.visibilityState === "visible") refresh(); }, 45000);
+    const f = () => refresh();
+    window.addEventListener("focus", f);
+    return () => { clearInterval(t); window.removeEventListener("focus", f); };
+  }, [refresh]);
+
+  /** Runs a real-mode write, shows the reason when it fails, reloads data when it works. */
+  const act = useCallback(async (p: Promise<Result>, okMessage?: string): Promise<boolean> => {
+    const r = await p;
+    if (!r.ok) { toast.error(r.error); return false; }
+    if (okMessage) toast.success(okMessage);
+    await refresh();
+    return true;
+  }, [refresh]);
+
   const addAuditLog = useCallback((log: Omit<AuditLog, "id" | "timestamp">) => {
+    if (isSupabaseConfigured) return; // the database writes its own audit trail
     setState(prev => ({
       ...prev,
       auditLogs: [
@@ -241,6 +306,7 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
   }, []);
 
   const addNotification = useCallback((notif: Omit<Notification, "id" | "createdAt" | "read">) => {
+    if (isSupabaseConfigured) return; // notifications are written by the server functions
     setState(prev => ({
       ...prev,
       notifications: [
@@ -264,6 +330,7 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
   }, []);
 
   const ensureEntityForUser = useCallback((u: { id: string; name: string; email: string; phone: string; role: string }) => {
+    if (isSupabaseConfigured) return; // real mode: the database creates these records at sign-up
     setState(prev => {
       const now = new Date().toISOString();
       let next = prev;
@@ -364,6 +431,7 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
   }, []);
 
   const updateOrderStatus = useCallback((orderId: string, status: Order["status"]) => {
+    if (isSupabaseConfigured) { const st = ORDER_DB[status]; if (!st) { toast.error("حالة غير مسموحة"); return Promise.resolve(false); } return act(db.setOrderStatus(orderId, st), "تم تحديث الطلب"); }
     setState(prev => {
       const order = prev.orders.find(o => o.id === orderId);
       const updatedOrders = prev.orders.map(o => o.id === orderId ? { ...o, status } : o);
@@ -425,6 +493,7 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
   }, []);
 
   const reviewInstallmentApplication = useCallback((id: string, approved: boolean, rejectionReason?: string) => {
+    if (isSupabaseConfigured) return act(db.decideApplication(id, approved, rejectionReason), approved ? "تمت الموافقة وأُنشئ العقد وجدول الأقساط" : "تم رفض الطلب");
     setState(prev => {
       const app = prev.installmentApplications.find(a => a.id === id);
       if (!app) return prev;
@@ -522,6 +591,13 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
 
   // Payment operations
   const recordPayment = useCallback((contractId: string, amount: number, method: string, installmentNumber?: number) => {
+    if (isSupabaseConfigured) {
+      const c = stateRef.current.installmentContracts.find(x => x.id === contractId);
+      const n = installmentNumber ?? c?.payments.find(x => x.status !== "مدفوع")?.number;
+      const inst = n != null ? installmentIndex[contractId]?.[n] : undefined;
+      if (!inst) { toast.error("لا يوجد قسط مستحق لهذا العقد"); return Promise.resolve(false); }
+      return act(db.recordPayment(inst.id, inst.amount, method || "cash"), "تم تسجيل الدفعة");
+    }
     setState(prev => {
       const newPayment: Payment = {
         id: `pay-${Date.now()}`,
@@ -589,6 +665,7 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
 
   // Product operations
   const addProduct = useCallback((product: Omit<Product, "id" | "createdAt" | "rating" | "reviewsCount" | "soldCount">) => {
+    if (isSupabaseConfigured) return act(db.saveProduct(product), "تمت إضافة المنتج");
     setState(prev => ({
       ...prev,
       products: [
@@ -606,6 +683,7 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
   }, []);
 
   const updateProduct = useCallback((id: string, updates: Partial<Product>) => {
+    if (isSupabaseConfigured) return act(db.saveProduct({ ...updates, id }), "تم حفظ المنتج");
     setState(prev => ({
       ...prev,
       products: prev.products.map(p => p.id === id ? { ...p, ...updates } : p),
@@ -613,11 +691,13 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
   }, []);
 
   const deleteProduct = useCallback((id: string) => {
+    if (isSupabaseConfigured) return act(db.deleteProduct(id), "تم حذف المنتج");
     setState(prev => ({ ...prev, products: prev.products.filter(p => p.id !== id) }));
   }, []);
 
   // Notifications
   const markNotificationRead = useCallback((id: string) => {
+    if (isSupabaseConfigured) { setState(prev => ({ ...prev, notifications: prev.notifications.map(n => n.id === id ? { ...n, read: true } : n) })); void db.markNotificationRead(id); return; }
     setState(prev => ({
       ...prev,
       notifications: prev.notifications.map(n => n.id === id ? { ...n, read: true } : n),
@@ -626,10 +706,20 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
 
   // Employee operations
   const addEmployee = useCallback((emp: Omit<Employee, "id">) => {
+    if (isSupabaseConfigured) { toast.info("الموظف يسجّل حسابه بنفسه ثم يختار شركتكم من صفحته، وبعدها تحددون أهليته وسقفه من هنا"); return Promise.resolve(false); }
     setState(prev => ({ ...prev, employees: [...prev.employees, { ...emp, id: `e-${employeeCounter++}` }] }));
   }, []);
 
   const updateEmployee = useCallback((id: string, updates: Partial<Employee>) => {
+    if (isSupabaseConfigured) {
+      const e = stateRef.current.employees.find(x => x.id === id);
+      if (!e) return Promise.resolve(false);
+      const merged = { ...e, ...updates };
+      const limitsChanged = ["eligibility", "installmentLimit", "salary", "status"].some(k => k in updates);
+      if (limitsChanged) return act(db.companySetEmployee(merged), "تم حفظ بيانات الموظف");
+      if ("jobTitle" in updates || "employeeNumber" in updates) return act(db.joinCompany(e.companyId, merged.jobTitle, merged.employeeNumber), "تم الحفظ");
+      return Promise.resolve(true);
+    }
     setState(prev => ({
       ...prev,
       employees: prev.employees.map(e => e.id === id ? { ...e, ...updates } : e),
@@ -638,6 +728,7 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
 
   // Delivery operations
   const updateDeliveryStatus = useCallback((id: string, status: Delivery["status"]) => {
+    if (isSupabaseConfigured) { const st = DELIVERY_DB[status]; if (!st) { toast.error("حالة غير مسموحة"); return Promise.resolve(false); } return act(db.setOrderStatus(id, st), "تم تحديث التوصيل"); }
     setState(prev => ({
       ...prev,
       deliveries: prev.deliveries.map(d => d.id === id ? { ...d, status } : d),
@@ -646,6 +737,7 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
 
   // Settlement operations
   const updateSettlementStatus = useCallback((id: string, status: Settlement["status"]) => {
+    if (isSupabaseConfigured) return act(db.setSettlement(id, status), "تم تحديث التسوية");
     setState(prev => ({
       ...prev,
       settlements: prev.settlements.map(s => s.id === id ? { ...s, status } : s),
@@ -654,6 +746,7 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
 
   // Identity Verification
   const submitIdentityVerification = useCallback((data: Omit<IdentityVerification, "id" | "submittedAt" | "status">) => {
+    if (isSupabaseConfigured) return; // real identity flow: components/IdentityCapture + /staff/identity
     const newVerification: IdentityVerification = {
       ...data,
       id: `v-${verificationCounter++}`,
@@ -673,6 +766,7 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
   }, []);
 
   const reviewIdentityVerification = useCallback((id: string, status: VerificationStatus, notes?: string) => {
+    if (isSupabaseConfigured) return;
     setState(prev => {
       const verif = prev.identityVerifications.find(v => v.id === id);
       if (!verif) return prev;
@@ -816,6 +910,7 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
   }, []);
 
   const companyApproveFinancing = useCallback((id: string, notes?: string) => {
+    if (isSupabaseConfigured) return act(db.companyDecide(id, true, notes), "وافقت الشركة على الطلب");
     setState(prev => {
       const req = prev.installmentRequests.find(r => r.id === id);
       if (!req) return prev;
@@ -883,6 +978,7 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
   }, []);
 
   const companyRejectFinancing = useCallback((id: string, notes?: string) => {
+    if (isSupabaseConfigured) return act(db.companyDecide(id, false, notes || "رفض من الشركة"), "تم رفض الطلب");
     setState(prev => {
       const req = prev.installmentRequests.find(r => r.id === id);
       if (!req) return prev;
@@ -936,6 +1032,7 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
   }, []);
 
   const logIdentityAccess = useCallback((verificationId: string, userName: string) => {
+    if (isSupabaseConfigured) return;
     setState(prev => {
       const auditLog: AuditLog = {
         id: `log-${auditCounter++}`,
@@ -954,11 +1051,51 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
     });
   }, []);
 
+  // ── Real-mode only operations (demo has local equivalents) ──
+  const placeOrder = useCallback(async (p: Parameters<typeof db.placeOrder>[0]): Promise<Result> => {
+    const r = await db.placeOrder(p);
+    if (r.ok) await refresh();
+    return r;
+  }, [refresh]);
+
+  const joinCompany = useCallback(async (companyId: string, job?: string, number?: string): Promise<Result> => {
+    const r = await db.joinCompany(companyId, job, number);
+    if (r.ok) await refresh();
+    return r;
+  }, [refresh]);
+
+  const setMerchantStatus = useCallback(async (id: string, status: "نشط" | "قيد المراجعة" | "موقوف"): Promise<boolean> => {
+    if (isSupabaseConfigured) return act(db.setMerchantStatus(id, status), "تم تحديث حالة التاجر");
+    setState(prev => ({ ...prev, merchants: prev.merchants.map(m => m.id === id ? { ...m, status } : m) }));
+    return true;
+  }, [act]);
+
+  const setCompanyStatus = useCallback(async (id: string, status: "نشط" | "قيد المراجعة" | "موقوف"): Promise<boolean> => {
+    if (isSupabaseConfigured) return act(db.setCompanyStatus(id, status), "تم تحديث حالة الشركة");
+    setState(prev => ({ ...prev, companies: prev.companies.map(c => c.id === id ? { ...c, status } : c) }));
+    return true;
+  }, [act]);
+
+  const setMerchantCommission = useCallback(async (id: string, percent: number): Promise<boolean> => {
+    if (!Number.isInteger(percent) || percent < 1 || percent > 10) { toast.error("العمولة رقم صحيح من 1 إلى 10"); return false; }
+    if (isSupabaseConfigured) return act(db.setCommission(id, percent), "تم حفظ العمولة");
+    setState(prev => ({ ...prev, merchants: prev.merchants.map(m => m.id === id ? { ...m, commissionPercent: percent } : m) }));
+    return true;
+  }, [act]);
+
   const value: AppContextType = {
     ...state,
     login,
     setCurrentUser,
     ensureEntityForUser,
+    isReal: real,
+    refresh,
+    markup,
+    placeOrder,
+    joinCompany,
+    setMerchantStatus,
+    setCompanyStatus,
+    setMerchantCommission,
     logout,
     register,
     addToCart,

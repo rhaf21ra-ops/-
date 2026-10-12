@@ -32,7 +32,7 @@ export function AuthBridge() {
       verificationStatus: IDENTITY_LABEL[user.identityStatus],
     });
     if (["customer", "employee", "merchant", "company"].includes(user.role)) {
-      ensureEntityForUser({ id: user.id, name: user.fullName, email: user.email, phone: user.phone, role: user.role });
+      ensureEntityForUser({ id: user.id, name: user.businessName || user.fullName, email: user.email, phone: user.phone, role: user.role });
     }
   }, [user, loading, setCurrentUser, ensureEntityForUser]);
 

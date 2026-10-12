@@ -17,12 +17,13 @@ import { toast } from "sonner";
 import { useState } from "react";
 
 export default function AdminInstallmentsPage() {
-  const { installmentApplications, reviewInstallmentApplication, addAuditLog, currentUser } = useApp();
+  const { installmentApplications, reviewInstallmentApplication, addAuditLog, currentUser, isReal } = useApp();
   const [reviewId, setReviewId] = useState<string | null>(null);
   const [rejectionReason, setRejectionReason] = useState("");
 
-  const handleApprove = (id: string) => {
-    reviewInstallmentApplication(id, true);
+  const handleApprove = async (id: string) => {
+    const ok = await Promise.resolve(reviewInstallmentApplication(id, true));
+    if (ok === false) return;
     addAuditLog({
       actor: currentUser?.name || "مدير",
       actorRole: "admin",
@@ -31,12 +32,14 @@ export default function AdminInstallmentsPage() {
       entityId: id,
       details: `الموافقة على طلب تقسيط`,
     });
-    toast.success("تم قبول طلب التقسيط بنجاح");
+    if (!isReal) toast.success("تم قبول طلب التقسيط بنجاح");
     setReviewId(null);
   };
 
-  const handleReject = (id: string) => {
-    reviewInstallmentApplication(id, false, rejectionReason);
+  const handleReject = async (id: string) => {
+    if (isReal && rejectionReason.trim().length < 3) { toast.error("اكتب سبب الرفض"); return; }
+    const ok = await Promise.resolve(reviewInstallmentApplication(id, false, rejectionReason));
+    if (ok === false) return;
     addAuditLog({
       actor: currentUser?.name || "مدير",
       actorRole: "admin",
@@ -45,7 +48,7 @@ export default function AdminInstallmentsPage() {
       entityId: id,
       details: `رفض طلب تقسيط${rejectionReason ? ` - ${rejectionReason}` : ""}`,
     });
-    toast.error("تم رفض طلب التقسيط");
+    if (!isReal) toast.error("تم رفض طلب التقسيط");
     setReviewId(null);
     setRejectionReason("");
   };

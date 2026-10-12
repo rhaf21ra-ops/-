@@ -30,7 +30,7 @@ const navItems: { href: string; label: string; icon: LucideIcon }[] = [
 ];
 
 export default function MerchantProductsPage() {
-  const { currentUser, merchants, products, addProduct, updateProduct, deleteProduct } = useApp();
+  const { currentUser, merchants, products, addProduct, updateProduct, deleteProduct, isReal } = useApp();
   const merchant = merchants.find(m => m.userId === currentUser?.id);
   const myProducts = products.filter(p => p.merchantId === merchant?.id);
 
@@ -47,7 +47,7 @@ export default function MerchantProductsPage() {
     setEditingId(null);
   };
 
-  const handleSubmit = (e: React.FormEvent) => {
+  const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
     if (!formData.name || !formData.cashPrice) {
       toast.error("البيانات غير مكتملة");
@@ -76,11 +76,13 @@ export default function MerchantProductsPage() {
     };
 
     if (editingId) {
-      updateProduct(editingId, productData);
-      toast.success("تم تحديث المنتج بنجاح");
+      const ok = await Promise.resolve(updateProduct(editingId, productData));
+      if (ok === false) return;
+      if (!isReal) toast.success("تم تحديث المنتج بنجاح");
     } else {
-      addProduct(productData);
-      toast.success("تم إضافة المنتج بنجاح");
+      const ok = await Promise.resolve(addProduct(productData));
+      if (ok === false) return;
+      if (!isReal) toast.success("تم إضافة المنتج بنجاح");
     }
     setDialogOpen(false);
     resetForm();
@@ -98,7 +100,7 @@ export default function MerchantProductsPage() {
 
   const handleDelete = (id: string) => {
     deleteProduct(id);
-    toast.success("تم حذف المنتج");
+    if (!isReal) toast.success("تم حذف المنتج");
   };
 
   return (

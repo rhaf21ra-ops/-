@@ -23,7 +23,7 @@ const navItems: { href: string; label: string; icon: LucideIcon }[] = [
 ];
 
 export default function CompanyDashboard() {
-  const { currentUser, companies, employees, installmentApplications, installmentContracts, installmentRequests, companyApproveFinancing, companyRejectFinancing } = useApp();
+  const { currentUser, companies, employees, installmentApplications, installmentContracts, installmentRequests, companyApproveFinancing, companyRejectFinancing, isReal } = useApp();
   const company = companies.find(c => c.userId === currentUser?.id);
   const myEmployees = employees.filter(e => e.companyId === company?.id);
   const activeEmployees = myEmployees.filter(e => e.status === "نشط");
@@ -140,11 +140,11 @@ export default function CompanyDashboard() {
                             <TableCell><StatusBadge status={r.status} /></TableCell>
                             <TableCell>
                               <div className="flex items-center gap-1">
-                                <Button size="sm" variant="outline" className="gap-1 text-green-600" onClick={() => { companyApproveFinancing(r.id, "موافقة"); toast.success("تمت الموافقة على طلب التمويل"); }}>
+                                <Button size="sm" variant="outline" className="gap-1 text-green-600" onClick={async () => { const ok = await Promise.resolve(companyApproveFinancing(r.id, "موافقة")); if (ok !== false && !isReal) toast.success("تمت الموافقة على طلب التمويل"); }}>
                                   <CheckCircle2 className="h-3.5 w-3.5" />
                                   موافقة
                                 </Button>
-                                <Button size="sm" variant="outline" className="gap-1 text-red-600" onClick={() => { companyRejectFinancing(r.id, "لا يوافق"); toast.success("تم رفض طلب التمويل"); }}>
+                                <Button size="sm" variant="outline" className="gap-1 text-red-600" onClick={async () => { const ok = await Promise.resolve(companyRejectFinancing(r.id, "لا يوافق")); if (ok !== false && !isReal) toast.success("تم رفض طلب التمويل"); }}>
                                   <XCircle className="h-3.5 w-3.5" />
                                   رفض
                                 </Button>

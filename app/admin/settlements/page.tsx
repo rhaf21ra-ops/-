@@ -16,7 +16,7 @@ import { toast } from "sonner";
 import type { SettlementStatus } from "@/lib/constants";
 
 export default function AdminSettlementsPage() {
-  const { settlements, updateSettlementStatus, addAuditLog, currentUser } = useApp();
+  const { settlements, updateSettlementStatus, addAuditLog, currentUser, isReal } = useApp();
 
   const handleStatusChange = (id: string, status: SettlementStatus) => {
     updateSettlementStatus(id, status);
@@ -28,7 +28,7 @@ export default function AdminSettlementsPage() {
       entityId: id,
       details: `تحديث حالة التسوية إلى: ${status}`,
     });
-    toast.success(`تم تحديث حالة التسوية إلى: ${status}`);
+    if (!isReal) toast.success(`تم تحديث حالة التسوية إلى: ${status}`);
   };
 
   const totalPending = settlements.filter(s => s.status !== "مدفوع").reduce((s, st) => s + st.merchantAmount, 0);

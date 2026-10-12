@@ -25,7 +25,7 @@ const navItems: { href: string; label: string; icon: LucideIcon }[] = [
 ];
 
 export default function MerchantOrdersPage() {
-  const { currentUser, merchants, orders, updateOrderStatus, addAuditLog } = useApp();
+  const { currentUser, merchants, orders, updateOrderStatus, addAuditLog, isReal } = useApp();
   const merchant = merchants.find(m => m.userId === currentUser?.id);
   const myOrders = orders.filter(o => o.merchantIds.includes(merchant?.id || ""));
 
@@ -39,7 +39,7 @@ export default function MerchantOrdersPage() {
       entityId: orderId,
       details: `تحديث حالة الطلب إلى: ${status}`,
     });
-    toast.success(`تم تحديث حالة الطلب إلى: ${status}`);
+    if (!isReal) toast.success(`تم تحديث حالة الطلب إلى: ${status}`);
   };
 
   return (

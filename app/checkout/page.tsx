@@ -26,7 +26,7 @@ import { toast } from "sonner";
 export default function CheckoutPage() {
   const {
     cart, cartTotal, clearCart, createOrder, createInstallmentApplication, createInstallmentRequest,
-    currentUser, employees, companies, addAuditLog,
+    currentUser, employees, companies, addAuditLog, isReal, placeOrder,
   } = useApp();
   const router = useRouter();
 
@@ -47,7 +47,8 @@ export default function CheckoutPage() {
   const [guarantee, setGuarantee] = useState<GuaranteeValue>(emptyGuarantee);
   const [submitting, setSubmitting] = useState(false);
 
-  const deliveryFee = 5000;
+  // Real mode: the server total has no delivery fee yet, so none is shown (never display a price that is not charged).
+  const deliveryFee = isReal ? 0 : 5000;
   const grandTotal = cartTotal + deliveryFee;
 
   const employee = employees.find(emp => emp.userId === currentUser?.id);
@@ -93,7 +94,7 @@ export default function CheckoutPage() {
     };
   };
 
-  const handleSubmit = (e: React.FormEvent) => {
+  const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
     if (!formData.name || !formData.phone || !formData.governorate || !formData.city || !formData.address) {
       toast.error("البيانات غير مكتملة", { description: "يرجى تعبئة جميع الحقول المطلوبة" });
@@ -102,6 +103,43 @@ export default function CheckoutPage() {
 
     const financing = paymentType === "تقسيط" ? buildFinancing() : null;
     if (paymentType === "تقسيط" && !financing) return;
+
+    if (isReal) {
+      if (!currentUser) {
+        toast.error("سجّل الدخول أولاً لإتمام الطلب");
+        router.push("/login?redirect=/checkout");
+        return;
+      }
+      setSubmitting(true);
+      const r = await placeOrder({
+        items: cart.map(i => ({ productId: i.productId, quantity: i.quantity })),
+        payment: paymentType,
+        recipient: formData.name,
+        phone: formData.phone,
+        governorate: formData.governorate,
+        city: formData.city,
+        address: formData.area ? `${formData.area} - ${formData.address}` : formData.address,
+        notes: formData.notes,
+        months: duration,
+        guaranteeTypeId: guarantee.guaranteeTypeId,
+        guaranteeDetails: guarantee.details,
+        guarantorName: guarantee.guarantorName,
+        guarantorPhone: guarantee.guarantorPhone,
+        guarantorIdNumber: guarantee.guarantorIdNumber,
+        branchId: financing?.branchId,
+      });
+      setSubmitting(false);
+      if (!r.ok) {
+        toast.error("تعذّر إنشاء الطلب", { description: r.error });
+        return;
+      }
+      toast.success(paymentType === "تقسيط" ? "تم إرسال طلب التقسيط" : "تم إنشاء الطلب", {
+        description: paymentType === "تقسيط" ? "سيراجعه الطرف المختص ثم تُعلَم بالنتيجة" : "سنوافيك بحالة التوصيل",
+      });
+      clearCart();
+      router.push(currentUser.role === "employee" ? "/employee/orders" : "/customer");
+      return;
+    }
 
     setSubmitting(true);
 

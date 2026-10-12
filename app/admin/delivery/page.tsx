@@ -15,7 +15,7 @@ import { toast } from "sonner";
 import type { DeliveryStatus } from "@/lib/constants";
 
 export default function AdminDeliveryPage() {
-  const { deliveries, updateDeliveryStatus, addAuditLog, currentUser } = useApp();
+  const { deliveries, updateDeliveryStatus, addAuditLog, currentUser, isReal } = useApp();
 
   const handleStatusChange = (id: string, status: DeliveryStatus) => {
     updateDeliveryStatus(id, status);
@@ -27,7 +27,7 @@ export default function AdminDeliveryPage() {
       entityId: id,
       details: `تحديث حالة التوصيل إلى: ${status}`,
     });
-    toast.success(`تم تحديث حالة التوصيل إلى: ${status}`);
+    if (!isReal) toast.success(`تم تحديث حالة التوصيل إلى: ${status}`);
   };
 
   return (

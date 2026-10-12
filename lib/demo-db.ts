@@ -14,6 +14,7 @@ export type DemoAccount = {
   identityStatus: "none" | "pending" | "verified" | "rejected" | "needs_changes";
   identityNote?: string;
   extraPerms: string[];
+  businessName?: string;
   createdAt: string;
 };
 

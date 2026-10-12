@@ -87,6 +87,8 @@ export interface Merchant {
   status: MerchantStatus;
   rating: number;
   salesTotal: number;
+  /** 1-10 integer percent kept by the platform. Absent = default 5. */
+  commissionPercent?: number;
   createdAt: string;
 }
 

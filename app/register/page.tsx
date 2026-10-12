@@ -20,7 +20,7 @@ import { User, Briefcase, Building2, UserPlus, Mail, Phone, MapPin, Building, Ha
 import { toast } from "sonner";
 
 function RegisterContent() {
-  const { signUp } = useAuth();
+  const { signUp, demoMode } = useAuth();
   const router = useRouter();
   const searchParams = useSearchParams();
   const initialRole = (searchParams.get("role") as UserRole) || "customer";
@@ -45,7 +45,12 @@ function RegisterContent() {
     }
 
     setLoading(true);
-    const { error, userId } = await signUp(formData.email, formData.password, formData.name, formData.phone, role as AuthUserRole);
+    const isOrg = role === "merchant" || role === "company";
+    const person = role === "merchant" ? formData.ownerName : role === "company" ? formData.contactName : formData.name;
+    const { error, userId } = await signUp(
+      formData.email, formData.password, (person || formData.name || "").trim(), formData.phone, role as AuthUserRole,
+      { businessName: isOrg ? formData.name : undefined, city: formData.city },
+    );
     if (error) {
       toast.error("فشل إنشاء الحساب", { description: error + " (لتشخيص الاتصال افتح /status)" });
       setLoading(false);
@@ -141,6 +146,7 @@ function RegisterContent() {
                         <Field label="الاسم الكامل *" icon={User} value={formData.name || ""} onChange={v => update("name", v)} placeholder="الاسم الكامل" required />
                         <Field label="رقم الهاتف *" icon={Phone} value={formData.phone || ""} onChange={v => update("phone", v)} placeholder="07XXXXXXXX" dir="ltr" required />
                         <Field label="البريد الإلكتروني *" icon={Mail} value={formData.email || ""} onChange={v => update("email", v)} placeholder="name@example.com" dir="ltr" required />
+                        {demoMode ? (
                         <div>
                           <Label className="mb-1.5 block">الشركة</Label>
                           <Select value={formData.company || ""} onValueChange={v => update("company", v)}>
@@ -153,6 +159,9 @@ function RegisterContent() {
                             </SelectContent>
                           </Select>
                         </div>
+                        ) : (
+                          <p className="sm:col-span-2 rounded-lg bg-muted p-3 text-sm text-muted-foreground">بعد إنشاء الحساب وتوثيق هويتك تختار شركتك من لوحتك، وتحدد الشركة أهليتك وسقفك.</p>
+                        )}
                         <Field label="الوظيفة" icon={BriefcaseBusiness} value={formData.jobTitle || ""} onChange={v => update("jobTitle", v)} placeholder="مثلاً: مهندس" />
                         <Field label="الراتب الشهري (ر.ي)" icon={Wallet} value={formData.salary || ""} onChange={v => update("salary", v)} placeholder="مثلاً: 200000" type="number" />
                         <Field label="رقم الموظف" icon={Hash} value={formData.employeeNumber || ""} onChange={v => update("employeeNumber", v)} placeholder="EMP-XXX" />
