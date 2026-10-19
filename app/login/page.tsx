@@ -92,9 +92,12 @@ function LoginContent() {
                   {loading ? "جاري تسجيل الدخول..." : (<><LogIn className="h-5 w-5 ml-2" />تسجيل الدخول</>)}
                 </Button>
               </form>
-              <div className="text-center text-sm">
+              <div className="flex items-center justify-between text-sm">
                 <span className="text-muted-foreground">ليس لديك حساب؟ </span>
                 <Link href="/register" className="text-primary font-medium hover:underline">إنشاء حساب</Link>
+              </div>
+              <div className="text-center text-sm">
+                <Link href="/forgot-password" className="text-muted-foreground hover:text-primary">نسيت كلمة المرور؟</Link>
               </div>
             </CardContent>
           </Card>

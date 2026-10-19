@@ -40,7 +40,7 @@ export function Footer() {
           <div>
             <h3 className="font-semibold mb-3">تواصل معنا</h3>
             <ul className="space-y-2 text-sm text-muted-foreground">
-              <li><Link href="/admin-login" className="flex items-center gap-2 hover:text-foreground"><Mail className="h-4 w-4" /> دخول الإدارة والموظفين</Link></li>
+              <li><Link href="/support" className="flex items-center gap-2 hover:text-foreground"><Mail className="h-4 w-4" /> خدمة العملاء</Link></li>
               <li className="flex items-center gap-2"><MapPin className="h-4 w-4" /> صنعاء، اليمن</li>
             </ul>
           </div>

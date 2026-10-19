@@ -92,7 +92,7 @@ export default function CartPage() {
                           <span className="text-xs text-muted-foreground">طريقة الدفع:</span>
                           <Select
                             value={item.paymentType}
-                            onValueChange={(v: "نقدي" | "تقسيط") => updateCartPaymentType(item.productId, v)}
+                            onValueChange={(v) => updateCartPaymentType(item.productId, v as "نقدي" | "تقسيط")}
                           >
                             <SelectTrigger className="h-8 w-28 text-xs">
                               <SelectValue />

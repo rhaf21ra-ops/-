@@ -13,14 +13,14 @@ import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@
 import { useApp } from "@/lib/store";
 import { formatCurrency } from "@/lib/brand";
 import { GOVERNORATES, EMPLOYEE_STATUSES } from "@/lib/constants";
-import { Home, Users, CreditCard, Settings, Plus, Pencil, UserCheck, UserX } from "lucide-react";
+import { Home, Users, CreditCard, Settings, Plus, Pencil, UserCheck, UserX, Phone, Briefcase, Wallet } from "lucide-react";
 import type { LucideIcon } from "lucide-react";
 import { useState } from "react";
 import { toast } from "sonner";
 import type { Employee, EmployeeStatus } from "@/lib/types";
 
 const navItems: { href: string; label: string; icon: LucideIcon }[] = [
-  { href: "/company", label: "الرئيسية", icon: Home },
+  { href: "/company", label: "الئيسية", icon: Home },
   { href: "/company/employees", label: "الموظفون", icon: Users },
   { href: "/company/installments", label: "عمليات التقسيط", icon: CreditCard },
   { href: "/company/settings", label: "الإعدادات", icon: Settings },
@@ -62,7 +62,6 @@ export default function CompanyEmployeesPage() {
       city: formData.city,
     };
     if (editingId) {
-      // real mode: only eligibility / limit / salary / status are the company's to change
       const patch = isReal ? { eligibility: formData.eligibility as Employee["eligibility"], installmentLimit: Number(formData.limit), salary: Number(formData.salary), status: formData.status as EmployeeStatus } : empData;
       const ok = await Promise.resolve(updateEmployee(editingId, patch));
       if (ok === false) return;
@@ -117,45 +116,94 @@ export default function CompanyEmployeesPage() {
       {myEmployees.length === 0 ? (
         <EmptyState icon={Users} title="لا يوجد موظفون" description={isReal ? "الموظف يسجّل حسابه ثم يختار شركتكم من صفحته، وسيظهر هنا لتحديد أهليته وسقفه" : "ابدأ بإضافة موظفي شركتك"} actionLabel={isReal ? undefined : "إضافة موظف"} actionHref="#" />
       ) : (
-        <Card>
-          <CardContent className="p-0 overflow-x-auto">
-            <Table>
-              <TableHeader>
-                <TableRow>
-                  <TableHead>الاسم</TableHead>
-                  <TableHead>رقم الموظف</TableHead>
-                  <TableHead>الوظيفة</TableHead>
-                  <TableHead>الراتب</TableHead>
-                  <TableHead>الحالة</TableHead>
-                  <TableHead>الأهلية</TableHead>
-                  <TableHead>السقف / المستخدم</TableHead>
-                  <TableHead>إجراءات</TableHead>
-                </TableRow>
-              </TableHeader>
-              <TableBody>
-                {myEmployees.map(emp => (
-                  <TableRow key={emp.id}>
-                    <TableCell className="text-sm font-medium">{emp.name}</TableCell>
-                    <TableCell className="text-sm">{emp.employeeNumber}</TableCell>
-                    <TableCell className="text-sm">{emp.jobTitle}</TableCell>
-                    <TableCell className="text-sm">{formatCurrency(emp.salary)}</TableCell>
-                    <TableCell><StatusBadge status={emp.status} /></TableCell>
-                    <TableCell><StatusBadge status={emp.eligibility} /></TableCell>
-                    <TableCell className="text-sm">{formatCurrency(emp.installmentLimit)} / {formatCurrency(emp.usedLimit)}</TableCell>
-                    <TableCell>
-                      <div className="flex gap-1">
-                        <Button variant="ghost" size="icon" className="h-8 w-8" onClick={() => handleEdit(emp)}><Pencil className="h-4 w-4" /></Button>
-                        <Button variant="ghost" size="icon" className="h-8 w-8" onClick={() => toggleStatus(emp)}>
-                          {emp.status === "نشط" ? <UserX className="h-4 w-4 text-destructive" /> : <UserCheck className="h-4 w-4 text-green-600" />}
-                        </Button>
-                      </div>
-                    </TableCell>
+        <>
+          {/* Mobile: card layout */}
+          <div className="space-y-3 md:hidden">
+            {myEmployees.map(emp => (
+              <Card key={emp.id}>
+                <CardContent className="p-4 space-y-3">
+                  <div className="flex items-start justify-between">
+                    <div>
+                      <p className="font-bold text-sm">{emp.name}</p>
+                      <p className="text-xs text-muted-foreground">{emp.employeeNumber}</p>
+                    </div>
+                    <div className="flex gap-1">
+                      <Button variant="ghost" size="icon" className="h-8 w-8" onClick={() => handleEdit(emp)}><Pencil className="h-4 w-4" /></Button>
+                      <Button variant="ghost" size="icon" className="h-8 w-8" onClick={() => toggleStatus(emp)}>
+                        {emp.status === "نشط" ? <UserX className="h-4 w-4 text-destructive" /> : <UserCheck className="h-4 w-4 text-green-600" />}
+                      </Button>
+                    </div>
+                  </div>
+                  <div className="grid grid-cols-2 gap-2 text-xs">
+                    <div className="flex items-center gap-1 text-muted-foreground">
+                      <Briefcase className="h-3.5 w-3.5" /> {emp.jobTitle || "—"}
+                    </div>
+                    <div className="flex items-center gap-1 text-muted-foreground">
+                      <Wallet className="h-3.5 w-3.5" /> {formatCurrency(emp.salary)}
+                    </div>
+                    <div className="flex items-center gap-1 text-muted-foreground">
+                      <Phone className="h-3.5 w-3.5" /> <span dir="ltr">{emp.phone || "—"}</span>
+                    </div>
+                    <div className="flex items-center gap-1">
+                      <StatusBadge status={emp.status} />
+                    </div>
+                  </div>
+                  <div className="flex items-center justify-between border-t pt-2">
+                    <div className="flex items-center gap-2">
+                      <span className="text-xs text-muted-foreground">الأهلية:</span>
+                      <StatusBadge status={emp.eligibility} />
+                    </div>
+                    <div className="text-xs">
+                      <span className="text-muted-foreground">السقف: </span>
+                      <span className="font-medium">{formatCurrency(emp.installmentLimit)}</span>
+                    </div>
+                  </div>
+                </CardContent>
+              </Card>
+            ))}
+          </div>
+
+          {/* Desktop: table layout */}
+          <Card className="hidden md:block">
+            <CardContent className="p-0 overflow-x-auto">
+              <Table>
+                <TableHeader>
+                  <TableRow>
+                    <TableHead>الاسم</TableHead>
+                    <TableHead>رقم الموظف</TableHead>
+                    <TableHead>الوظيفة</TableHead>
+                    <TableHead>الراتب</TableHead>
+                    <TableHead>الحالة</TableHead>
+                    <TableHead>الأهلية</TableHead>
+                    <TableHead>السقف / المستخدم</TableHead>
+                    <TableHead>إجراءات</TableHead>
                   </TableRow>
-                ))}
-              </TableBody>
-            </Table>
-          </CardContent>
-        </Card>
+                </TableHeader>
+                <TableBody>
+                  {myEmployees.map(emp => (
+                    <TableRow key={emp.id}>
+                      <TableCell className="text-sm font-medium">{emp.name}</TableCell>
+                      <TableCell className="text-sm">{emp.employeeNumber}</TableCell>
+                      <TableCell className="text-sm">{emp.jobTitle}</TableCell>
+                      <TableCell className="text-sm">{formatCurrency(emp.salary)}</TableCell>
+                      <TableCell><StatusBadge status={emp.status} /></TableCell>
+                      <TableCell><StatusBadge status={emp.eligibility} /></TableCell>
+                      <TableCell className="text-sm">{formatCurrency(emp.installmentLimit)} / {formatCurrency(emp.usedLimit)}</TableCell>
+                      <TableCell>
+                        <div className="flex gap-1">
+                          <Button variant="ghost" size="icon" className="h-8 w-8" onClick={() => handleEdit(emp)}><Pencil className="h-4 w-4" /></Button>
+                          <Button variant="ghost" size="icon" className="h-8 w-8" onClick={() => toggleStatus(emp)}>
+                            {emp.status === "نشط" ? <UserX className="h-4 w-4 text-destructive" /> : <UserCheck className="h-4 w-4 text-green-600" />}
+                          </Button>
+                        </div>
+                      </TableCell>
+                    </TableRow>
+                  ))}
+                </TableBody>
+              </Table>
+            </CardContent>
+          </Card>
+        </>
       )}
     </DashboardLayout>
   );

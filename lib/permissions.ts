@@ -40,6 +40,7 @@ export const PAGE_PERMISSIONS: [prefix: string, anyOf: string[]][] = [
   ["/admin/delivery", ["orders.view", "orders.update"]],
   ["/admin/installments", ["financing.view"]],
   ["/admin/payments", ["payments.record", "financing.view"]],
+  ["/admin/support", ["support.manage"]],
 ];
 
 export type AccessSubject = { roles: string[]; permissions: string[] } | null;

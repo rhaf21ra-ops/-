@@ -1,0 +1,2 @@
+[functions.identity-file-url]
+verify_jwt = true

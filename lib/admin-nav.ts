@@ -1,5 +1,5 @@
 import type { LucideIcon } from "lucide-react";
-import { Home, Users, Store, Building2, Package, ShoppingBag, CreditCard, Wallet, Receipt, BarChart3, Settings, ScrollText, Truck, ShieldCheck, KeyRound } from "lucide-react";
+import { Home, Users, Store, Building2, Package, ShoppingBag, CreditCard, Wallet, Receipt, BarChart3, Settings, ScrollText, Truck, ShieldCheck, KeyRound, Headphones as HeadphonesIcon } from "lucide-react";
 
 export const adminNavItems: { href: string; label: string; icon: LucideIcon }[] = [
   { href: "/admin", label: "الرئيسية", icon: Home },
@@ -16,5 +16,6 @@ export const adminNavItems: { href: string; label: string; icon: LucideIcon }[] 
   { href: "/admin/reports", label: "التقارير", icon: BarChart3 },
   { href: "/admin/audit-logs", label: "سجل العمليات", icon: ScrollText },
   { href: "/staff/identity", label: "التحقق من الهوية", icon: ShieldCheck },
+  { href: "/admin/support", label: "خدمة العملاء", icon: HeadphonesIcon },
   { href: "/admin/settings", label: "الإعدادات", icon: Settings },
 ];

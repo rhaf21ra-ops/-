@@ -26,25 +26,40 @@ const navItems: { href: string; label: string; icon: LucideIcon }[] = [
   { href: "/admin/settings", label: "الإعدادات", icon: Settings },
 ];
 
-const monthlyData = [
-  { month: "يناير", sales: 1200000, orders: 15 },
-  { month: "فبراير", sales: 1800000, orders: 22 },
-  { month: "مارس", sales: 2100000, orders: 28 },
-  { month: "أبريل", sales: 2500000, orders: 30 },
-  { month: "مايو", sales: 3200000, orders: 35 },
-  { month: "يونيو", sales: 3800000, orders: 42 },
-  { month: "يوليو", sales: 4500000, orders: 50 },
-  { month: "أغسطس", sales: 5200000, orders: 58 },
-  { month: "سبتمبر", sales: 6100000, orders: 65 },
-];
+const MONTH_NAMES = ["يناير", "فبراير", "مارس", "أبريل", "مايو", "يونيو", "يوليو", "أغسطس", "سبتمبر", "أكتوبر", "نوفمبر", "ديسمبر"];
+const PIE_COLORS = ["hsl(158, 64%, 30%)", "hsl(217, 91%, 60%)", "hsl(43, 74%, 66%)", "hsl(0, 84%, 60%)", "hsl(280, 65%, 60%)", "hsl(200, 70%, 50%)"];
 
-const categoryData = [
-  { name: "الهواتف", value: 35, color: "hsl(158, 64%, 30%)" },
-  { name: "الإلكترونيات", value: 25, color: "hsl(217, 91%, 60%)" },
-  { name: "الأثاث", value: 15, color: "hsl(43, 74%, 66%)" },
-  { name: "الأجهزة المنزلية", value: 12, color: "hsl(0, 84%, 60%)" },
-  { name: "أخرى", value: 13, color: "hsl(280, 65%, 60%)" },
-];
+function buildMonthlyData(orders: { createdAt: string; total: number }[]) {
+  const now = new Date();
+  const months: { month: string; sales: number; orders: number }[] = [];
+  for (let i = 8; i >= 0; i--) {
+    const d = new Date(now.getFullYear(), now.getMonth() - i, 1);
+    const key = `${d.getFullYear()}-${d.getMonth()}`;
+    const monthOrders = orders.filter(o => {
+      if (!o.createdAt) return false;
+      const od = new Date(o.createdAt);
+      return `${od.getFullYear()}-${od.getMonth()}` === key;
+    });
+    months.push({
+      month: MONTH_NAMES[d.getMonth()],
+      sales: monthOrders.reduce((s, o) => s + o.total, 0),
+      orders: monthOrders.length,
+    });
+  }
+  return months;
+}
+
+function buildCategoryData(products: { category: string; visible: boolean }[]) {
+  const counts = new Map<string, number>();
+  for (const p of products) {
+    const cat = p.category || "أخرى";
+    counts.set(cat, (counts.get(cat) ?? 0) + 1);
+  }
+  return Array.from(counts.entries())
+    .sort((a, b) => b[1] - a[1])
+    .slice(0, 6)
+    .map(([name, value], i) => ({ name, value, color: PIE_COLORS[i % PIE_COLORS.length] }));
+}
 
 export default function AdminDashboard() {
   const { users, employees, merchants, companies, products, orders, installmentApplications, installmentContracts, payments, settlements } = useApp();
@@ -52,6 +67,9 @@ export default function AdminDashboard() {
   const totalSales = orders.reduce((s, o) => s + o.total, 0);
   const totalPayments = payments.filter(p => p.status === "ناجح").reduce((s, p) => s + p.amount, 0);
   const activeInstallments = installmentContracts.filter(c => c.status === "نشط").length;
+
+  const monthlyData = buildMonthlyData(orders);
+  const categoryData = buildCategoryData(products);
 
   return (
     <DashboardLayout navItems={navItems} title="لوحة الإدارة" role="admin">

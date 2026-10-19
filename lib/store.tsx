@@ -208,12 +208,16 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
 
   const [hydrated, setHydrated] = useState(false);
 
+  // Each user gets their own cart key in localStorage so carts don't bleed across accounts.
+  const cartKey = (userId?: string | null) => (userId ? `soq-cart-${userId}` : "soq-cart-guest");
+
   // Persist current user, cart and (demo mode) the whole demo data set to localStorage
   useEffect(() => {
     try {
       const savedUser = localStorage.getItem("soq-user");
-      const savedCart = localStorage.getItem("soq-cart");
       const savedData = isSupabaseConfigured ? null : localStorage.getItem("qistuha-demo-data");
+      const initialUserId = savedUser && !isSupabaseConfigured ? JSON.parse(savedUser).id : null;
+      const savedCart = localStorage.getItem(cartKey(initialUserId));
       setState(prev => {
         let next = prev;
         if (savedData) {
@@ -249,11 +253,23 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
     } catch {}
   }, [state.currentUser, hydrated]);
 
+  // Save the cart under the current user's key.
   useEffect(() => {
     try {
-      if (hydrated) localStorage.setItem("soq-cart", JSON.stringify(state.cart));
+      if (hydrated) localStorage.setItem(cartKey(state.currentUser?.id), JSON.stringify(state.cart));
     } catch {}
-  }, [state.cart, hydrated]);
+  }, [state.cart, hydrated, state.currentUser?.id]);
+
+  // When the signed-in user changes, load that user's saved cart (or start empty).
+  useEffect(() => {
+    if (!hydrated) return;
+    try {
+      const saved = localStorage.getItem(cartKey(state.currentUser?.id));
+      setState(prev => ({ ...prev, cart: saved ? JSON.parse(saved) : [] }));
+    } catch {
+      setState(prev => ({ ...prev, cart: [] }));
+    }
+  }, [state.currentUser?.id, hydrated]);
 
   const stateRef = useRef(state);
   stateRef.current = state;
