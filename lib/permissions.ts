@@ -10,6 +10,7 @@ export const PERMISSIONS: { code: string; label: string }[] = [
   { code: "payments.record", label: "تسجيل دفعات الأقساط" },
   { code: "orders.view", label: "عرض الطلبات" },
   { code: "orders.update", label: "تحديث حالة الطلبات والتوصيل" },
+  { code: "requests.manage", label: "متابعة طلبات المنتجات غير المدرجة والتنسيق مع المتاجر" },
   { code: "support.manage", label: "الرد على تذاكر الدعم" },
 ];
 
@@ -21,7 +22,7 @@ export const BUILTIN_STAFF_ROLES: RoleDef[] = [
   { name: "staff_verification", label: "موظف مراقبة تأكيد الحساب", perms: ["identity.review"], builtin: true },
   { name: "staff_merchants", label: "موظف متابعة التجار", perms: ["merchants.view", "merchants.manage"], builtin: true },
   { name: "staff_financing", label: "موظف متابعة التمويلات", perms: ["financing.view", "financing.review", "payments.record"], builtin: true },
-  { name: "staff_orders", label: "موظف الطلبات والتوصيل", perms: ["orders.view", "orders.update"], builtin: true },
+  { name: "staff_orders", label: "موظف الطلبات والتوصيل", perms: ["orders.view", "orders.update", "requests.manage"], builtin: true },
   { name: "staff_support", label: "موظف الدعم", perms: ["support.manage"], builtin: true },
 ];
 
@@ -41,6 +42,7 @@ export const PAGE_PERMISSIONS: [prefix: string, anyOf: string[]][] = [
   ["/admin/installments", ["financing.view"]],
   ["/admin/payments", ["payments.record", "financing.view"]],
   ["/admin/support", ["support.manage"]],
+  ["/admin/requests", ["requests.manage"]],
 ];
 
 export type AccessSubject = { roles: string[]; permissions: string[] } | null;

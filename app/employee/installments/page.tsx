@@ -25,19 +25,7 @@ import {
 } from "@/components/ui/tabs";
 import { useApp } from "@/lib/store";
 import { formatCurrency } from "@/lib/brand";
-import {
-  Home,
-  ShoppingBag,
-  CreditCard,
-  Wallet,
-  Bell,
-  User,
-  Receipt,
-  TrendingDown,
-  CalendarClock,
-  FileText,
-  ArrowLeft,
-} from "lucide-react";
+import { Home, ShoppingBag, CreditCard, Wallet, Bell, User, Receipt, TrendingDown, CalendarClock, FileText, ArrowLeft, PackagePlus, ClipboardList } from "lucide-react";
 import type { LucideIcon } from "lucide-react";
 
 const navItems: { href: string; label: string; icon: LucideIcon }[] = [
@@ -45,6 +33,8 @@ const navItems: { href: string; label: string; icon: LucideIcon }[] = [
   { href: "/employee/orders", label: "طلباتي", icon: ShoppingBag },
   { href: "/employee/installments", label: "التقسيط", icon: CreditCard },
   { href: "/employee/payments", label: "المدفوعات", icon: Wallet },
+  { href: "/request-product", label: "طلب منتج غير مدرج", icon: PackagePlus },
+  { href: "/requests", label: "طلباتي الخاصة", icon: ClipboardList },
   { href: "/employee/notifications", label: "الإشعارات", icon: Bell },
   { href: "/employee/profile", label: "الملف الشخصي", icon: User },
 ];

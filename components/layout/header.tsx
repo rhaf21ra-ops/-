@@ -29,6 +29,7 @@ export function Header() {
     { href: "/categories", label: "التصنيفات" },
     { href: "/merchants", label: "التجار" },
     { href: "/how-it-works", label: "كيف يعمل" },
+    { href: "/request-product", label: "طلب منتج غير مدرج" },
   ]
 
   return (
