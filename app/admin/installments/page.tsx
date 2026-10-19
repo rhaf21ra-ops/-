@@ -86,10 +86,10 @@ export default function AdminInstallmentsPage() {
                     <TableCell className="text-sm">{app.companyName}</TableCell>
                     <TableCell className="text-sm line-clamp-1 max-w-28">{app.productName}</TableCell>
                     <TableCell className="text-sm">{app.merchantName}</TableCell>
-                    <TableCell className="text-sm">{formatCurrency(app.cashPrice)}</TableCell>
-                    <TableCell className="text-sm">{formatCurrency(app.deferredPrice)}</TableCell>
+                    <TableCell className="text-sm">{formatCurrency(app.cashPrice, app.currency)}</TableCell>
+                    <TableCell className="text-sm">{formatCurrency(app.deferredPrice, app.currency)}</TableCell>
                     <TableCell className="text-sm">{app.durationMonths} شهر</TableCell>
-                    <TableCell className="text-sm">{formatCurrency(app.monthlyInstallment)}</TableCell>
+                    <TableCell className="text-sm">{formatCurrency(app.monthlyInstallment, app.currency)}</TableCell>
                     <TableCell><StatusBadge status={app.status} /></TableCell>
                     <TableCell>
                       {(app.status === "جديد" || app.status === "قيد المراجعة") ? (
@@ -107,10 +107,10 @@ export default function AdminInstallmentsPage() {
                                 <div><span className="text-muted-foreground">الشركة:</span> {app.companyName}</div>
                                 <div><span className="text-muted-foreground">المنتج:</span> {app.productName}</div>
                                 <div><span className="text-muted-foreground">التاجر:</span> {app.merchantName}</div>
-                                <div><span className="text-muted-foreground">السعر النقدي:</span> {formatCurrency(app.cashPrice)}</div>
-                                <div><span className="text-muted-foreground">السعر المؤجل:</span> {formatCurrency(app.deferredPrice)}</div>
+                                <div><span className="text-muted-foreground">السعر النقدي:</span> {formatCurrency(app.cashPrice, app.currency)}</div>
+                                <div><span className="text-muted-foreground">السعر المؤجل:</span> {formatCurrency(app.deferredPrice, app.currency)}</div>
                                 <div><span className="text-muted-foreground">المدة:</span> {app.durationMonths} شهر</div>
-                                <div><span className="text-muted-foreground">القسط الشهري:</span> {formatCurrency(app.monthlyInstallment)}</div>
+                                <div><span className="text-muted-foreground">القسط الشهري:</span> {formatCurrency(app.monthlyInstallment, app.currency)}</div>
                               </div>
                               <div>
                                 <Label className="mb-1.5 block">سبب الرفض (اختياري)</Label>

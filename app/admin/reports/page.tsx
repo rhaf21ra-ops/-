@@ -1,6 +1,7 @@
 "use client";
 
 import { DashboardLayout } from "@/components/layout/dashboard-layout";
+import type { Currency } from "@/lib/currency";
 import { adminNavItems } from "@/lib/admin-nav";
 import { StatCard } from "@/components/stat-card";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
@@ -13,7 +14,7 @@ import { BarChart, Bar, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContaine
 const MONTH_NAMES = ["يناير", "فبراير", "مارس", "أبريل", "مايو", "يونيو", "يوليو", "أغسطس", "سبتمبر", "أكتوبر", "نوفمبر", "ديسمبر"];
 const PIE_COLORS = ["hsl(158, 64%, 30%)", "hsl(217, 91%, 60%)", "hsl(43, 74%, 66%)", "hsl(0, 84%, 60%)", "hsl(280, 65%, 60%)"];
 
-function buildMonthlyData(orders: { createdAt: string; total: number }[], apps: { createdAt: string }[], payments: { createdAt: string; status: string }[]) {
+function buildMonthlyData(orders: { createdAt: string; total: number; currency?: Currency }[], apps: { createdAt: string }[], payments: { createdAt: string; status: string }[], fx: (n: number, c?: Currency) => number) {
   const now = new Date();
   const months: { month: string; sales: number; orders: number; installments: number; payments: number }[] = [];
   for (let i = 8; i >= 0; i--) {
@@ -24,7 +25,7 @@ function buildMonthlyData(orders: { createdAt: string; total: number }[], apps: 
     const mp = payments.filter(p => p.createdAt && p.status === "ناجح" && `${new Date(p.createdAt).getFullYear()}-${new Date(p.createdAt).getMonth()}` === key);
     months.push({
       month: MONTH_NAMES[d.getMonth()],
-      sales: mo.reduce((s, o) => s + o.total, 0),
+      sales: mo.reduce((s, o) => s + fx(o.total, o.currency), 0),
       orders: mo.length,
       installments: ma.length,
       payments: mp.length,
@@ -48,12 +49,12 @@ function buildCityData(orders: { governorate?: string; city?: string }[]) {
 }
 
 export default function AdminReportsPage() {
-  const { users, employees, merchants, companies, products, orders, installmentApplications, payments, settlements, deliveries } = useApp();
+  const { users, employees, merchants, companies, products, orders, installmentApplications, payments, settlements, deliveries, toYER } = useApp();
 
-  const totalSales = orders.reduce((s, o) => s + o.total, 0);
-  const totalPayments = payments.filter(p => p.status === "ناجح").reduce((s, p) => s + p.amount, 0);
+  const totalSales = orders.reduce((s, o) => s + toYER(o.total, o.currency), 0);
+  const totalPayments = payments.filter(p => p.status === "ناجح").reduce((s, p) => s + toYER(p.amount, p.currency), 0);
 
-  const monthlyData = buildMonthlyData(orders, installmentApplications, payments);
+  const monthlyData = buildMonthlyData(orders, installmentApplications, payments, toYER);
   const cityData = buildCityData(orders);
 
   return (
@@ -149,9 +150,9 @@ export default function AdminReportsPage() {
             </TableHeader>
             <TableBody>
               <TableRow><TableCell>إجمالي الطلبات</TableCell><TableCell>{orders.length}</TableCell><TableCell>{formatCurrency(totalSales)}</TableCell></TableRow>
-              <TableRow><TableCell>طلبات التقسيط</TableCell><TableCell>{installmentApplications.length}</TableCell><TableCell>{formatCurrency(installmentApplications.reduce((s,a) => s + a.deferredPrice, 0))}</TableCell></TableRow>
+              <TableRow><TableCell>طلبات التقسيط</TableCell><TableCell>{installmentApplications.length}</TableCell><TableCell>{formatCurrency(installmentApplications.reduce((s,a) => s + toYER(a.deferredPrice, a.currency), 0))}</TableCell></TableRow>
               <TableRow><TableCell>المدفوعات الناجحة</TableCell><TableCell>{payments.filter(p => p.status === "ناجح").length}</TableCell><TableCell>{formatCurrency(totalPayments)}</TableCell></TableRow>
-              <TableRow><TableCell>التسويات</TableCell><TableCell>{settlements.length}</TableCell><TableCell>{formatCurrency(settlements.reduce((s,st) => s + st.merchantAmount, 0))}</TableCell></TableRow>
+              <TableRow><TableCell>التسويات</TableCell><TableCell>{settlements.length}</TableCell><TableCell>{formatCurrency(settlements.reduce((s,st) => s + toYER(st.merchantAmount, st.currency), 0))}</TableCell></TableRow>
               <TableRow><TableCell>عمليات التوصيل</TableCell><TableCell>{deliveries.length}</TableCell><TableCell>—</TableCell></TableRow>
             </TableBody>
           </Table>

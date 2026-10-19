@@ -1,6 +1,7 @@
 "use client";
 
 import { DashboardLayout } from "@/components/layout/dashboard-layout";
+import { ExchangeRatesCard } from "@/components/ExchangeRatesCard";
 import { adminNavItems } from "@/lib/admin-nav";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Input } from "@/components/ui/input";
@@ -19,12 +20,13 @@ export default function AdminSettingsPage() {
       <h1 className="text-2xl font-bold mb-6">إعدادات المنصة</h1>
 
       <div className="grid lg:grid-cols-2 gap-6">
+        <ExchangeRatesCard />
         <Card>
           <CardHeader><CardTitle className="text-lg">إعدادات الهوية</CardTitle></CardHeader>
           <CardContent className="space-y-4">
             <div><Label className="mb-1.5 block">اسم المنصة</Label><Input defaultValue={BRAND.name} /></div>
             <div><Label className="mb-1.5 block">الشعار النصي</Label><Input defaultValue={BRAND.tagline} /></div>
-            <div><Label className="mb-1.5 block">العملة</Label><Input defaultValue={BRAND.currency} disabled /></div>
+            <div><Label className="mb-1.5 block">العملة الأساسية</Label><Input defaultValue="ريال يمني (مع الريال السعودي والدولار)" disabled /></div>
             <Button onClick={() => toast.success("تم حفظ الإعدادات")}>حفظ</Button>
           </CardContent>
         </Card>

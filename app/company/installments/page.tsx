@@ -52,9 +52,9 @@ export default function CompanyInstallmentsPage() {
                     <TableCell className="font-medium text-sm">{app.applicationNumber}</TableCell>
                     <TableCell className="text-sm">{app.employeeName}</TableCell>
                     <TableCell className="text-sm line-clamp-1 max-w-32">{app.productName}</TableCell>
-                    <TableCell className="text-sm">{formatCurrency(app.deferredPrice)}</TableCell>
+                    <TableCell className="text-sm">{formatCurrency(app.deferredPrice, app.currency)}</TableCell>
                     <TableCell className="text-sm">{app.durationMonths} شهر</TableCell>
-                    <TableCell className="text-sm">{formatCurrency(app.monthlyInstallment)}</TableCell>
+                    <TableCell className="text-sm">{formatCurrency(app.monthlyInstallment, app.currency)}</TableCell>
                     <TableCell><StatusBadge status={app.status} /></TableCell>
                   </TableRow>
                 ))
@@ -88,9 +88,9 @@ export default function CompanyInstallmentsPage() {
                     <TableCell className="font-medium text-sm">{c.contractNumber}</TableCell>
                     <TableCell className="text-sm">{c.employeeName}</TableCell>
                     <TableCell className="text-sm line-clamp-1 max-w-32">{c.productName}</TableCell>
-                    <TableCell className="text-sm">{formatCurrency(c.totalAmount)}</TableCell>
-                    <TableCell className="text-sm text-green-600">{formatCurrency(c.paidAmount)}</TableCell>
-                    <TableCell className="text-sm text-orange-600">{formatCurrency(c.remainingAmount)}</TableCell>
+                    <TableCell className="text-sm">{formatCurrency(c.totalAmount, c.currency)}</TableCell>
+                    <TableCell className="text-sm text-green-600">{formatCurrency(c.paidAmount, c.currency)}</TableCell>
+                    <TableCell className="text-sm text-orange-600">{formatCurrency(c.remainingAmount, c.currency)}</TableCell>
                     <TableCell><StatusBadge status={c.status} /></TableCell>
                   </TableRow>
                 ))}

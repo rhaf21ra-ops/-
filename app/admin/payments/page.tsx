@@ -19,15 +19,15 @@ import { toast } from "sonner";
 import { useState } from "react";
 
 export default function AdminPaymentsPage() {
-  const { payments, installmentContracts, recordPayment, addAuditLog, currentUser, isReal } = useApp();
+  const { payments, installmentContracts, recordPayment, addAuditLog, currentUser, isReal, toYER } = useApp();
   const [dialogOpen, setDialogOpen] = useState(false);
   const [selectedContractId, setSelectedContractId] = useState("");
   const [amount, setAmount] = useState("");
   const [method, setMethod] = useState("محفظة إلكترونية");
 
   const activeContracts = installmentContracts.filter(c => c.status === "نشط");
-  const totalPaid = payments.filter(p => p.status === "ناجح").reduce((s, p) => s + p.amount, 0);
-  const totalPending = payments.filter(p => p.status === "قيد المعالجة").reduce((s, p) => s + p.amount, 0);
+  const totalPaid = payments.filter(p => p.status === "ناجح").reduce((s, p) => s + toYER(p.amount, p.currency), 0);
+  const totalPending = payments.filter(p => p.status === "قيد المعالجة").reduce((s, p) => s + toYER(p.amount, p.currency), 0);
 
   const handleRecordPayment = async (e: React.FormEvent) => {
     e.preventDefault();
@@ -129,7 +129,7 @@ export default function AdminPaymentsPage() {
                       <TableCell className="text-sm">{p.employeeName}</TableCell>
                       <TableCell className="text-sm">{contract?.contractNumber || "—"}</TableCell>
                       <TableCell className="text-sm">{p.installmentNumber || "—"}</TableCell>
-                      <TableCell className="text-sm font-bold">{formatCurrency(p.amount)}</TableCell>
+                      <TableCell className="text-sm font-bold">{formatCurrency(p.amount, p.currency)}</TableCell>
                       <TableCell className="text-sm">{p.method}</TableCell>
                       <TableCell><StatusBadge status={p.status} /></TableCell>
                       <TableCell className="text-xs text-muted-foreground">{new Date(p.createdAt).toLocaleDateString("ar-YE")}</TableCell>

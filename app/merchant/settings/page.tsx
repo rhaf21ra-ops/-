@@ -6,7 +6,7 @@ import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { useApp } from "@/lib/store";
-import { Home, Package, ShoppingBag, Boxes, Wallet, Settings } from "lucide-react";
+import { Home, Package, ShoppingBag, Boxes, Wallet, Settings, FileText } from "lucide-react";
 import type { LucideIcon } from "lucide-react";
 import { toast } from "sonner";
 
@@ -16,6 +16,7 @@ const navItems: { href: string; label: string; icon: LucideIcon }[] = [
   { href: "/merchant/orders", label: "الطلبات", icon: ShoppingBag },
   { href: "/merchant/inventory", label: "المخزون", icon: Boxes },
   { href: "/merchant/settlements", label: "التسويات", icon: Wallet },
+  { href: "/invoices", label: "الفواتير", icon: FileText },
   { href: "/merchant/settings", label: "الإعدادات", icon: Settings },
 ];
 

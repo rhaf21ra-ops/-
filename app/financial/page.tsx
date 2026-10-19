@@ -16,12 +16,12 @@ const navItems: { href: string; label: string; icon: LucideIcon }[] = [
 ];
 
 export default function FinancialDashboardPage() {
-  const { installmentApplications, installmentContracts } = useApp();
+  const { installmentApplications, installmentContracts, toYER } = useApp();
 
   const pendingApplications = installmentApplications.filter(a => a.status === "قيد المراجعة" || a.status === "جديد");
   const activeContracts = installmentContracts.filter(c => c.status === "نشط");
-  const totalFinancing = activeContracts.reduce((sum, c) => sum + c.totalAmount, 0);
-  const totalRemaining = activeContracts.reduce((sum, c) => sum + c.remainingAmount, 0);
+  const totalFinancing = activeContracts.reduce((sum, c) => sum + toYER(c.totalAmount, c.currency), 0);
+  const totalRemaining = activeContracts.reduce((sum, c) => sum + toYER(c.remainingAmount, c.currency), 0);
 
   return (
     <DashboardLayout navItems={navItems} title="الجهة المالية التجريبية" role="admin">
@@ -64,7 +64,7 @@ export default function FinancialDashboardPage() {
                     <p className="text-xs text-muted-foreground">{app.employeeName} · {app.applicationNumber}</p>
                   </div>
                   <div className="text-left">
-                    <p className="font-bold text-sm">{formatCurrency(app.deferredPrice)}</p>
+                    <p className="font-bold text-sm">{formatCurrency(app.deferredPrice, app.currency)}</p>
                     <p className="text-xs text-muted-foreground">{app.durationMonths} شهراً</p>
                   </div>
                 </div>

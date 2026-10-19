@@ -16,7 +16,7 @@ import { toast } from "sonner";
 import type { SettlementStatus } from "@/lib/constants";
 
 export default function AdminSettlementsPage() {
-  const { settlements, updateSettlementStatus, addAuditLog, currentUser, isReal } = useApp();
+  const { settlements, updateSettlementStatus, addAuditLog, currentUser, isReal, toYER } = useApp();
 
   const handleStatusChange = (id: string, status: SettlementStatus) => {
     updateSettlementStatus(id, status);
@@ -31,8 +31,8 @@ export default function AdminSettlementsPage() {
     if (!isReal) toast.success(`تم تحديث حالة التسوية إلى: ${status}`);
   };
 
-  const totalPending = settlements.filter(s => s.status !== "مدفوع").reduce((s, st) => s + st.merchantAmount, 0);
-  const totalPaid = settlements.filter(s => s.status === "مدفوع").reduce((s, st) => s + st.merchantAmount, 0);
+  const totalPending = settlements.filter(s => s.status !== "مدفوع").reduce((s, st) => s + toYER(st.merchantAmount, st.currency), 0);
+  const totalPaid = settlements.filter(s => s.status === "مدفوع").reduce((s, st) => s + toYER(st.merchantAmount, st.currency), 0);
 
   return (
     <DashboardLayout navItems={adminNavItems} title="التسويات" role="admin">
@@ -65,8 +65,8 @@ export default function AdminSettlementsPage() {
                   <TableRow key={s.id}>
                     <TableCell className="font-medium text-sm">{s.merchantName}</TableCell>
                     <TableCell className="text-sm">{s.orderNumber}</TableCell>
-                    <TableCell className="text-sm">{formatCurrency(s.saleValue)}</TableCell>
-                    <TableCell className="text-sm font-bold">{formatCurrency(s.merchantAmount)}</TableCell>
+                    <TableCell className="text-sm">{formatCurrency(s.saleValue, s.currency)}</TableCell>
+                    <TableCell className="text-sm font-bold">{formatCurrency(s.merchantAmount, s.currency)}</TableCell>
                     <TableCell><StatusBadge status={s.status} /></TableCell>
                     <TableCell className="text-xs text-muted-foreground">{new Date(s.date).toLocaleDateString("ar-YE")}</TableCell>
                     <TableCell>

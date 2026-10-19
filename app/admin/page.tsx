@@ -1,6 +1,7 @@
 "use client";
 
 import { DashboardLayout } from "@/components/layout/dashboard-layout";
+import type { Currency } from "@/lib/currency";
 import { StatCard } from "@/components/stat-card";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
@@ -29,7 +30,7 @@ const navItems: { href: string; label: string; icon: LucideIcon }[] = [
 const MONTH_NAMES = ["يناير", "فبراير", "مارس", "أبريل", "مايو", "يونيو", "يوليو", "أغسطس", "سبتمبر", "أكتوبر", "نوفمبر", "ديسمبر"];
 const PIE_COLORS = ["hsl(158, 64%, 30%)", "hsl(217, 91%, 60%)", "hsl(43, 74%, 66%)", "hsl(0, 84%, 60%)", "hsl(280, 65%, 60%)", "hsl(200, 70%, 50%)"];
 
-function buildMonthlyData(orders: { createdAt: string; total: number }[]) {
+function buildMonthlyData(orders: { createdAt: string; total: number; currency?: Currency }[], fx: (n: number, c?: Currency) => number) {
   const now = new Date();
   const months: { month: string; sales: number; orders: number }[] = [];
   for (let i = 8; i >= 0; i--) {
@@ -42,7 +43,7 @@ function buildMonthlyData(orders: { createdAt: string; total: number }[]) {
     });
     months.push({
       month: MONTH_NAMES[d.getMonth()],
-      sales: monthOrders.reduce((s, o) => s + o.total, 0),
+      sales: monthOrders.reduce((s, o) => s + fx(o.total, o.currency), 0),
       orders: monthOrders.length,
     });
   }
@@ -62,13 +63,13 @@ function buildCategoryData(products: { category: string; visible: boolean }[]) {
 }
 
 export default function AdminDashboard() {
-  const { users, employees, merchants, companies, products, orders, installmentApplications, installmentContracts, payments, settlements } = useApp();
+  const { users, employees, merchants, companies, products, orders, installmentApplications, installmentContracts, payments, settlements, toYER } = useApp();
 
-  const totalSales = orders.reduce((s, o) => s + o.total, 0);
-  const totalPayments = payments.filter(p => p.status === "ناجح").reduce((s, p) => s + p.amount, 0);
+  const totalSales = orders.reduce((s, o) => s + toYER(o.total, o.currency), 0);
+  const totalPayments = payments.filter(p => p.status === "ناجح").reduce((s, p) => s + toYER(p.amount, p.currency), 0);
   const activeInstallments = installmentContracts.filter(c => c.status === "نشط").length;
 
-  const monthlyData = buildMonthlyData(orders);
+  const monthlyData = buildMonthlyData(orders, toYER);
   const categoryData = buildCategoryData(products);
 
   return (
@@ -157,7 +158,7 @@ export default function AdminDashboard() {
                   <TableRow key={o.id}>
                     <TableCell className="text-xs font-medium">{o.orderNumber}</TableCell>
                     <TableCell className="text-xs">{o.customerName}</TableCell>
-                    <TableCell className="text-xs">{formatCurrency(o.total)}</TableCell>
+                    <TableCell className="text-xs">{formatCurrency(o.total, o.currency)}</TableCell>
                     <TableCell className="text-xs">{o.status}</TableCell>
                   </TableRow>
                 ))}

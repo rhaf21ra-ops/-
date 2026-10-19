@@ -1,3 +1,4 @@
+import { formatMoney, type Currency } from "@/lib/currency";
 export const BRAND = {
   name: "قسطها",
   tagline: "تسوّق من متاجر اليمن، وادفع على راحتك",
@@ -9,10 +10,8 @@ export const BRAND = {
 
 export const INSTALLMENT_DURATIONS = [6, 9, 12, 18, 24];
 
-export function formatCurrency(amount: number): string {
-  return new Intl.NumberFormat("ar-YE", { maximumFractionDigits: 0 }).format(
-    Math.round(amount)
-  ) + " ر.ي";
+export function formatCurrency(amount: number, currency: Currency = "YER"): string {
+  return formatMoney(amount, currency);
 }
 
 export function calculateDeferredPrice(cashPrice: number): number {

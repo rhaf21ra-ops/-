@@ -4,8 +4,9 @@ import { supabase } from "@/lib/supabase-client";
 import type {
   User, Employee, Company, Merchant, Product, Order, OrderItem, InstallmentApplication, InstallmentContract,
   Payment, Settlement, Delivery, Notification, AuditLog, InstallmentRequest, FinancingDetails,
-  InstallmentPaymentSchedule, OrderStatus, DeliveryStatus,
+  InstallmentPaymentSchedule, OrderStatus, DeliveryStatus, Invoice,
 } from "@/lib/types";
+import { asCurrency, roundMoney, DEFAULT_RATES, type Rates, type Currency } from "@/lib/currency";
 import type { UserRole, InstallmentStatus, MerchantStatus, EmployeeStatus, VerificationStatus } from "@/lib/constants";
 import type { GuaranteeType } from "@/components/GuaranteeSelect";
 import type { BranchRecord } from "@/lib/branches";
@@ -79,7 +80,7 @@ export type Snapshot = {
   users: User[]; employees: Employee[]; companies: Company[]; merchants: Merchant[]; products: Product[]; orders: Order[];
   installmentApplications: InstallmentApplication[]; installmentContracts: InstallmentContract[]; installmentRequests: InstallmentRequest[];
   payments: Payment[]; settlements: Settlement[]; deliveries: Delivery[]; notifications: Notification[]; auditLogs: AuditLog[];
-  markup: number; branches: BranchRecord[]; guaranteeTypes: GuaranteeType[];
+  markup: number; branches: BranchRecord[]; guaranteeTypes: GuaranteeType[]; rates: Rates; invoices: Invoice[];
 };
 
 // ids of installments, needed to record a payment by (contract, number)
@@ -92,13 +93,16 @@ const sortedImages = (rows: Row[] | null | undefined) => [...(rows ?? [])].sort(
 
 export async function loadSnapshot(userId: string | null): Promise<Snapshot> {
   // Reference data (public)
-  const [branchRows, gtRows, markupRaw] = await Promise.all([
+  const [rateRows, branchRows, gtRows, markupRaw] = await Promise.all([
+    safe<Row[]>("exchange_rates", supabase.from("exchange_rates").select("code, yer_per_unit"), []),
     safe<Row[]>("branches", supabase.from("branches").select("id, name, region, active").eq("active", true).limit(1000), []),
     safe<Row[]>("guarantee_types", supabase.from("guarantee_types").select("*").eq("active", true).order("sort_order"), []),
     userId
       ? safe<any>("markup", supabase.rpc("effective_markup"), null)
       : safe<any>("markup", supabase.from("platform_settings").select("value").eq("key", "default_markup_percent").maybeSingle(), null),
   ]);
+  const rates: Rates = { ...DEFAULT_RATES };
+  for (const r of rateRows) if (r.code in rates && num(r.yer_per_unit) > 0) rates[r.code as keyof Rates] = num(r.yer_per_unit);
   const markup = typeof markupRaw === "number" ? markupRaw : Number(markupRaw?.value ?? markupRaw ?? 22) || 22;
   const branches: BranchRecord[] = branchRows.filter((b) => b.region).map((b) => ({ id: b.id, region: b.region, name: b.name, is_active: true }));
   const guaranteeTypes: GuaranteeType[] = gtRows.map((g) => ({
@@ -142,11 +146,12 @@ export async function loadSnapshot(userId: string | null): Promise<Snapshot> {
   const visibleMerchants = new Set<string>([...merchRows.map((m) => m.id), ...merchPub.map((m) => m.id)]);
   const products: Product[] = prodRows.filter((p) => visibleMerchants.has(p.merchant_id || one<Row>(p.stores)?.merchant_id)).map((p) => {
     const store = one<Row>(p.stores);
-    const price = Math.round(num(p.cash_price) * (1 - num(p.discount_percent) / 100));
+    const cur = asCurrency(p.currency);
+    const price = roundMoney(num(p.cash_price) * (1 - num(p.discount_percent) / 100), cur);
     const mid = p.merchant_id || store?.merchant_id || "";
     return {
       id: p.id, merchantId: mid, merchantName: merchantName.get(mid) || store?.name || "", name: p.name, description: p.description || "",
-      cashPrice: price, deferredPrice: Math.round(price * (1 + markup / 100)), category: (one<Row>(p.categories)?.name || "أخرى") as Product["category"],
+      currency: cur, cashPrice: price, deferredPrice: roundMoney(price * (1 + markup / 100), cur), category: (one<Row>(p.categories)?.name || "أخرى") as Product["category"],
       stock: num(p.stock), images: sortedImages(p.product_images), installmentAvailable: p.installment_available !== false,
       city: p.city || store?.city || "", rating: num(p.rating), reviewsCount: 0, soldCount: num(p.sold_count),
       specs: Array.isArray(p.specs) ? p.specs : [], featured: !!p.featured, visible: p.active !== false && p.visible !== false, createdAt: p.created_at,
@@ -155,7 +160,8 @@ export async function loadSnapshot(userId: string | null): Promise<Snapshot> {
   const productById = new Map(products.map((p) => [p.id, p]));
 
   // People
-  const [empRows, orderRows, appRows, contractRows, payRows, comRows, notifRows, auditRows, profRows, roleRows, detailRows] = await Promise.all([
+  const [invRows, empRows, orderRows, appRows, contractRows, payRows, comRows, notifRows, auditRows, profRows, roleRows, detailRows] = await Promise.all([
+    safe<Row[]>("invoices", supabase.from("invoices").select("*, orders(order_number)").order("issued_at", { ascending: false }).limit(500), []),
     safe<Row[]>("employees", supabase.from("employees").select("*").limit(1000), []),
     safe<Row[]>("orders", supabase.from("orders")
       .select("*, order_items(id, product_id, merchant_id, quantity, unit_price, installment_months, products(name, product_images(url, storage_path, position)))")
@@ -210,6 +216,7 @@ export async function loadSnapshot(userId: string | null): Promise<Snapshot> {
   };
   const orders: Order[] = orderRows.map((o) => {
     const installment = o.payment_method === "installment";
+    const ocur = asCurrency(o.currency);
     const months = installment ? num(o.order_items?.[0]?.installment_months) || 12 : 0;
     const items: OrderItem[] = (o.order_items ?? []).map((i: Row) => {
       const pr = productById.get(i.product_id);
@@ -217,12 +224,12 @@ export async function loadSnapshot(userId: string | null): Promise<Snapshot> {
       return {
         productId: i.product_id, productName: one<Row>(i.products)?.name || pr?.name || "", productImage: sortedImages(one<Row>(i.products)?.product_images)[0] || pr?.images[0] || "",
         merchantId: i.merchant_id || "", merchantName: merchantName.get(i.merchant_id) || pr?.merchantName || "", quantity: i.quantity, cashPrice: unit,
-        deferredPrice: Math.round(unit * (1 + markup / 100)), paymentType: installment ? "تقسيط" : "نقدي",
+        deferredPrice: roundMoney(unit * (1 + markup / 100), ocur), paymentType: installment ? "تقسيط" : "نقدي",
       };
     });
     void months;
     return {
-      id: o.id, orderNumber: o.order_number, customerName: o.recipient_name, customerId: o.user_id, items, total: num(o.total),
+      id: o.id, orderNumber: o.order_number, customerName: o.recipient_name, customerId: o.user_id, items, total: num(o.total), currency: ocur,
       paymentType: installment ? "تقسيط" : "نقدي", status: ORDER_AR[o.status] ?? "قيد المراجعة", city: o.city, governorate: o.governorate,
       address: o.address, phone: o.phone, notes: o.notes || "", createdAt: o.created_at, merchantIds: [...new Set(items.map((i) => i.merchantId).filter(Boolean))],
       financing: financingOf(appByOrder.get(o.id)),
@@ -241,14 +248,14 @@ export async function loadSnapshot(userId: string | null): Promise<Snapshot> {
     id: a.id, applicationNumber: "INS-" + String(a.id).slice(0, 6).toUpperCase(), employeeId: a.employee_id || a.applicant_user_id,
     employeeName: a.applicant_name || empById.get(a.employee_id)?.name || profById.get(a.applicant_user_id)?.full_name || "", companyId: a.company_id || "",
     companyName: a.company_name || "", productId: "", productName: a.product_summary || "", merchantId: "", merchantName: a.merchant_summary || "",
-    cashPrice: num(a.cash_price), deferredPrice: num(a.deferred_price), durationMonths: a.months, monthlyInstallment: num(a.monthly_installment),
+    currency: asCurrency(a.currency), cashPrice: num(a.cash_price), deferredPrice: num(a.deferred_price), durationMonths: a.months, monthlyInstallment: num(a.monthly_installment),
     status: applicationStatus(a), createdAt: a.created_at, reviewedAt: a.admin_decided_at || undefined, reviewedBy: a.admin_decided_by ? "الإدارة" : undefined,
     rejectionReason: a.rejection_reason || undefined, financing: financingOf(a),
   }));
   const installmentRequests: InstallmentRequest[] = appRows.filter((a) => a.company_id).map((a) => ({
     id: a.id, requestNumber: "REQ-" + String(a.id).slice(0, 6).toUpperCase(), userId: a.applicant_user_id,
     userName: a.applicant_name || "", userRole: "employee" as UserRole, productId: "", productName: a.product_summary || "", productImage: "", merchantId: "",
-    merchantName: a.merchant_summary || "", cashPrice: num(a.cash_price), deferredPrice: num(a.deferred_price), durationMonths: a.months,
+    merchantName: a.merchant_summary || "", currency: asCurrency(a.currency), cashPrice: num(a.cash_price), deferredPrice: num(a.deferred_price), durationMonths: a.months,
     monthlyInstallment: num(a.monthly_installment), status: a.status === "rejected" ? "مرفوض" : a.status === "approved" ? "موافق" : a.status === "completed" ? "مكتمل" : "قيد المراجعة",
     createdAt: a.created_at, companyId: a.company_id, companyApproved: a.company_approved ?? null, companyReviewedAt: a.company_decided_at || undefined,
     companyNotes: a.company_note || undefined, rejectionReason: a.rejection_reason || undefined, financing: financingOf(a),
@@ -257,17 +264,18 @@ export async function loadSnapshot(userId: string | null): Promise<Snapshot> {
 
   const installmentContracts: InstallmentContract[] = contractRows.map((c) => {
     const a = appById.get(c.application_id) ?? {};
+    const ccur = asCurrency(a.currency);
     const sch = [...(c.installments ?? [])].sort((x: Row, y: Row) => x.number - y.number);
     installmentIndex[c.id] = Object.fromEntries(sch.map((i: Row) => [i.number, { id: i.id, amount: num(i.amount) }]));
     const paid = sch.filter((i: Row) => i.status === "paid");
     const paidAmount = paid.reduce((s: number, i: Row) => s + num(i.amount), 0);
     const total = num(a.deferred_price) || sch.reduce((s: number, i: Row) => s + num(i.amount), 0);
     const payments: InstallmentPaymentSchedule[] = sch.map((i: Row) => ({
-      number: i.number, amount: num(i.amount), dueDate: i.due_date, status: INST_AR[i.status] ?? "قادم",
+      number: i.number, amount: num(i.amount), currency: ccur, dueDate: i.due_date, status: INST_AR[i.status] ?? "قادم",
     }));
     return {
       id: c.id, applicationId: c.application_id, contractNumber: c.contract_number || "CON-" + String(c.id).slice(0, 6).toUpperCase(),
-      employeeId: a.employee_id || a.applicant_user_id || "", employeeName: a.applicant_name || "", productName: a.product_summary || "", totalAmount: total,
+      employeeId: a.employee_id || a.applicant_user_id || "", employeeName: a.applicant_name || "", productName: a.product_summary || "", currency: ccur, totalAmount: total,
       monthlyInstallment: num(a.monthly_installment), durationMonths: a.months ?? sch.length, paidAmount, remainingAmount: Math.max(0, total - paidAmount),
       paidInstallments: paid.length, status: c.status === "completed" ? "مكتمل" : c.status === "defaulted" ? "متعثر" : c.status === "active" ? "نشط" : "جديد",
       startDate: c.start_date || c.created_at, firstDueDate: sch[0]?.due_date || "", payments,
@@ -276,7 +284,7 @@ export async function loadSnapshot(userId: string | null): Promise<Snapshot> {
   const contractById = new Map(installmentContracts.map((c) => [c.id, c]));
   const payments: Payment[] = payRows.map((p) => ({
     id: p.id, paymentNumber: p.payment_number || "PAY-" + String(p.id).slice(0, 6).toUpperCase(), contractId: p.contract_id || "",
-    employeeName: contractById.get(p.contract_id)?.employeeName || "", amount: num(p.amount), status: p.status === "failed" ? "فشل" : p.status === "processing" ? "قيد المعالجة" : "ناجح",
+    employeeName: contractById.get(p.contract_id)?.employeeName || "", currency: contractById.get(p.contract_id)?.currency, amount: num(p.amount), status: p.status === "failed" ? "فشل" : p.status === "processing" ? "قيد المعالجة" : "ناجح",
     method: p.method || "", createdAt: p.paid_at, installmentNumber: one<Row>(p.installments)?.number,
   }));
 
@@ -285,10 +293,24 @@ export async function loadSnapshot(userId: string | null): Promise<Snapshot> {
     const ord = one<Row>(oi?.orders);
     return {
       id: c.id, merchantId: c.merchant_id, merchantName: merchantName.get(c.merchant_id) || "", orderId: oi?.order_id || "", orderNumber: ord?.order_number || "",
-      saleValue: num(c.gross), merchantAmount: num(c.net), status: SETTLEMENT_AR[one<Row>(c.settlements)?.status ?? "processing"] ?? "قيد المعالجة",
+      currency: asCurrency(c.currency), saleValue: num(c.gross), merchantAmount: num(c.net), status: SETTLEMENT_AR[one<Row>(c.settlements)?.status ?? "processing"] ?? "قيد المعالجة",
       date: ord?.created_at || c.created_at,
     };
   });
+
+  const invoices: Invoice[] = invRows.map((v) => ({
+    id: v.id, invoiceNumber: v.invoice_number, verifyCode: v.verify_code || "", orderId: v.order_id, orderNumber: one<Row>(v.orders)?.order_number || "",
+    kind: v.kind === "installment_sale" ? "installment_sale" : "sale", status: v.status === "void" ? "void" : "issued", currency: asCurrency(v.currency),
+    issuedAt: v.issued_at, buyerId: v.buyer_id || "", buyerName: v.buyer_name || "", buyerPhone: v.buyer_phone || "", buyerAddress: v.buyer_address || "",
+    merchantId: v.merchant_id || "", merchantName: v.merchant_name || merchantName.get(v.merchant_id) || "",
+    items: (Array.isArray(v.items_json) ? v.items_json : []).map((i: Row) => ({
+      name: i.name || "", qty: num(i.qty), unitPrice: num(i.unit_price), lineTotal: num(i.line_total) || num(i.qty) * num(i.unit_price),
+      origCurrency: i.orig_currency ? asCurrency(i.orig_currency) : undefined, origUnitPrice: i.orig_unit_price != null ? num(i.orig_unit_price) : undefined,
+    })),
+    subtotal: num(v.subtotal), discount: num(v.discount), shipping: num(v.shipping), total: num(v.total),
+    months: v.months ?? undefined, markupPercent: v.markup_percent != null ? num(v.markup_percent) : undefined,
+    deferredTotal: v.deferred_total != null ? num(v.deferred_total) : undefined, monthly: v.monthly != null ? num(v.monthly) : undefined, contractId: v.contract_id || undefined,
+  }));
 
   const notifications: Notification[] = notifRows.map((n) => ({
     id: n.id, userId: n.user_id, title: n.title, message: n.body || "", type: (n.type || "system") as Notification["type"], read: !!n.read, createdAt: n.created_at, link: n.link || undefined,
@@ -301,12 +323,14 @@ export async function loadSnapshot(userId: string | null): Promise<Snapshot> {
     };
   });
 
-  return { users, employees, companies, merchants, products, orders, installmentApplications, installmentContracts, installmentRequests, payments, settlements, deliveries, notifications, auditLogs, markup, branches, guaranteeTypes };
+  return { users, employees, companies, merchants, products, orders, installmentApplications, installmentContracts, installmentRequests, payments, settlements, deliveries, notifications, auditLogs, markup, branches, guaranteeTypes, rates, invoices };
 }
 
 // ── Writes ────────────────────────────────────────────────────
 const ERRORS: [RegExp, string][] = [
   [/insufficient stock/i, "الكمية المطلوبة غير متوفرة في المخزون"],
+  [/unsupported currency/i, "العملة غير مدعومة"],
+  [/invalid rate/i, "سعر الصرف غير صحيح"],
   [/merchant is not active/i, "متجر هذا المنتج غير مفعّل حالياً"],
   [/product not available/i, "أحد المنتجات لم يعد متاحاً"],
   [/account is not active/i, "حسابك غير مفعّل بعد: تحتاج مراجعة الهوية أولاً"],
@@ -343,7 +367,7 @@ export const db = {
   placeOrder(p: {
     items: { productId: string; quantity: number }[]; payment: "نقدي" | "تقسيط"; recipient: string; phone: string; governorate: string; city: string;
     address: string; notes?: string; months?: number; guaranteeTypeId?: number | null; guaranteeDetails?: Record<string, string>;
-    guarantorName?: string; guarantorPhone?: string; guarantorIdNumber?: string; branchId?: string;
+    guarantorName?: string; guarantorPhone?: string; guarantorIdNumber?: string; branchId?: string; currency?: Currency;
   }) {
     return wrap(supabase.rpc("place_order", {
       p_items: p.items.map((i) => ({ product_id: i.productId, quantity: i.quantity })),
@@ -351,7 +375,7 @@ export const db = {
       p_recipient: p.recipient, p_phone: p.phone, p_governorate: p.governorate, p_city: p.city, p_address: p.address, p_notes: p.notes || null,
       p_months: p.payment === "تقسيط" ? p.months ?? null : null, p_guarantee_type_id: p.guaranteeTypeId ?? null,
       p_guarantee_details: p.guaranteeDetails ?? {}, p_guarantor_name: p.guarantorName || null, p_guarantor_phone: p.guarantorPhone || null,
-      p_guarantor_id_number: p.guarantorIdNumber || null, p_branch_id: p.branchId || null,
+      p_guarantor_id_number: p.guarantorIdNumber || null, p_branch_id: p.branchId || null, p_currency: p.currency ?? "YER",
     }));
   },
   joinCompany: (companyId: string, job?: string, number?: string) => wrap(supabase.rpc("join_company", { p_company: companyId, p_job: job || null, p_number: number || null })),
@@ -366,6 +390,7 @@ export const db = {
   setMerchantStatus: (id: string, status: string) => wrap(supabase.rpc("set_merchant_status", { p_merchant: id, p_status: MERCHANT_DB[status] ?? status })),
   setCompanyStatus: (id: string, status: string) => wrap(supabase.rpc("set_company_status", { p_company: id, p_status: MERCHANT_DB[status] ?? status })),
   setSettlement: (commissionId: string, status: string) => wrap(supabase.rpc("set_commission_settlement", { p_commission: commissionId, p_status: SETTLEMENT_DB[status] ?? status })),
+  setRate: (code: Currency, rate: number) => wrap(supabase.rpc("set_exchange_rate", { p_code: code, p_rate: rate })),
   markNotificationRead: (id: string) => wrap(supabase.from("notifications").update({ read: true }).eq("id", id)),
 
   async saveProduct(input: Partial<Product> & { id?: string }): Promise<Result> {
@@ -379,6 +404,7 @@ export const db = {
       if (input.name !== undefined) row.name = input.name;
       if (input.description !== undefined) row.description = input.description;
       if (input.cashPrice !== undefined) { row.cash_price = input.cashPrice; row.discount_percent = 0; }
+      if (input.currency !== undefined) row.currency = input.currency;
       if (input.stock !== undefined) row.stock = input.stock;
       if (input.city !== undefined) row.city = input.city;
       if (input.installmentAvailable !== undefined) row.installment_available = input.installmentAvailable;

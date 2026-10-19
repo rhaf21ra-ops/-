@@ -28,7 +28,7 @@ import {
 import { useApp } from "@/lib/store";
 import { formatCurrency } from "@/lib/brand";
 import { useToast } from "@/hooks/use-toast";
-import { Home, ShoppingBag, CreditCard, Wallet, Bell, User, Mail, Phone, Building2, Briefcase, Banknote, MapPin, CalendarDays, IdCard, Pencil, Receipt, PackagePlus, ClipboardList } from "lucide-react";
+import { Home, ShoppingBag, CreditCard, Wallet, Bell, User, Mail, Phone, Building2, Briefcase, Banknote, MapPin, CalendarDays, IdCard, Pencil, Receipt, PackagePlus, ClipboardList, FileText } from "lucide-react";
 import type { LucideIcon } from "lucide-react";
 
 const navItems: { href: string; label: string; icon: LucideIcon }[] = [
@@ -38,6 +38,7 @@ const navItems: { href: string; label: string; icon: LucideIcon }[] = [
   { href: "/employee/payments", label: "المدفوعات", icon: Wallet },
   { href: "/request-product", label: "طلب منتج غير مدرج", icon: PackagePlus },
   { href: "/requests", label: "طلباتي الخاصة", icon: ClipboardList },
+  { href: "/invoices", label: "فواتيري", icon: FileText },
   { href: "/employee/notifications", label: "الإشعارات", icon: Bell },
   { href: "/employee/profile", label: "الملف الشخصي", icon: User },
 ];

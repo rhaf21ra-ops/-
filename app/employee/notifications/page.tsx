@@ -15,7 +15,7 @@ import {
   SelectValue,
 } from "@/components/ui/select";
 import { useApp } from "@/lib/store";
-import { Home, ShoppingBag, CreditCard, Wallet, Bell, User, BellOff, Truck, Settings, CheckCheck, ExternalLink, PackagePlus, ClipboardList } from "lucide-react";
+import { Home, ShoppingBag, CreditCard, Wallet, Bell, User, BellOff, Truck, Settings, CheckCheck, ExternalLink, PackagePlus, ClipboardList, FileText } from "lucide-react";
 import type { LucideIcon } from "lucide-react";
 import type { Notification } from "@/lib/types";
 
@@ -26,6 +26,7 @@ const navItems: { href: string; label: string; icon: LucideIcon }[] = [
   { href: "/employee/payments", label: "المدفوعات", icon: Wallet },
   { href: "/request-product", label: "طلب منتج غير مدرج", icon: PackagePlus },
   { href: "/requests", label: "طلباتي الخاصة", icon: ClipboardList },
+  { href: "/invoices", label: "فواتيري", icon: FileText },
   { href: "/employee/notifications", label: "الإشعارات", icon: Bell },
   { href: "/employee/profile", label: "الملف الشخصي", icon: User },
 ];

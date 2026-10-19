@@ -1,6 +1,8 @@
 "use client";
 
 import { useRouter } from "next/navigation";
+import { CurrencySwitch } from "@/components/CurrencySwitch";
+import { roundMoney } from "@/lib/currency";
 import { Header } from "@/components/layout/header";
 import { Footer } from "@/components/layout/footer";
 import { BottomNav } from "@/components/layout/bottom-nav";
@@ -25,8 +27,8 @@ import { toast } from "sonner";
 
 export default function CheckoutPage() {
   const {
-    cart, cartTotal, clearCart, createOrder, createInstallmentApplication, createInstallmentRequest,
-    currentUser, employees, companies, addAuditLog, isReal, placeOrder,
+    cart, clearCart, createOrder, createInstallmentApplication, createInstallmentRequest,
+    currentUser, employees, companies, addAuditLog, isReal, placeOrder, toPay, payCurrency, markup,
   } = useApp();
   const router = useRouter();
 
@@ -48,15 +50,18 @@ export default function CheckoutPage() {
   const [submitting, setSubmitting] = useState(false);
 
   // Real mode: the server total has no delivery fee yet, so none is shown (never display a price that is not charged).
-  const deliveryFee = isReal ? 0 : 5000;
-  const grandTotal = cartTotal + deliveryFee;
+  const deliveryFee = isReal ? 0 : toPay(5000, "YER");
 
   const employee = employees.find(emp => emp.userId === currentUser?.id);
   const company = employee ? companies.find(c => c.id === employee.companyId) : null;
   const guaranteeTypes = guaranteeOptionsFor(!!employee, company);
 
-  const deferredTotal = cart.reduce((sum, item) => sum + item.deferredPrice * item.quantity, 0);
-  const monthlyInstallment = Math.round(deferredTotal / duration);
+  // Every unit price is converted and rounded in the pay currency first (same rule as the server), then the markup is applied to the total.
+  const cashTotal = cart.reduce((sum, item) => sum + toPay(item.cashPrice, item.currency) * item.quantity, 0);
+  const deferredTotal = roundMoney(cashTotal * (1 + markup / 100), payCurrency);
+  const monthlyInstallment = roundMoney(deferredTotal / duration, payCurrency);
+  const orderSubtotal = paymentType === "تقسيط" ? deferredTotal : cashTotal;
+  const grandTotal = orderSubtotal + deliveryFee;
 
   /** Returns the validated financing block, or null after showing the error. */
   const buildFinancing = (): FinancingDetails | null => {
@@ -127,6 +132,7 @@ export default function CheckoutPage() {
         guarantorPhone: guarantee.guarantorPhone,
         guarantorIdNumber: guarantee.guarantorIdNumber,
         branchId: financing?.branchId,
+        currency: payCurrency,
       });
       setSubmitting(false);
       if (!r.ok) {
@@ -150,9 +156,9 @@ export default function CheckoutPage() {
       merchantId: item.merchantId,
       merchantName: item.merchantName,
       quantity: item.quantity,
-      cashPrice: item.cashPrice,
-      deferredPrice: item.deferredPrice,
-      paymentType: item.paymentType,
+      cashPrice: toPay(item.cashPrice, item.currency),
+      deferredPrice: toPay(item.deferredPrice, item.currency),
+      paymentType,
     }));
 
     const merchantIds = [...new Set(items.map(i => i.merchantId))];
@@ -162,6 +168,8 @@ export default function CheckoutPage() {
       customerId: employee?.id || currentUser?.id || "",
       items,
       total: grandTotal,
+      currency: payCurrency,
+      months: paymentType === "تقسيط" ? duration : undefined,
       paymentType,
       status: paymentType === "تقسيط" ? "قيد المراجعة" : "جديد",
       city: formData.city,
@@ -175,7 +183,6 @@ export default function CheckoutPage() {
 
     if (paymentType === "تقسيط" && financing && cart.length > 0) {
       const firstItem = cart[0];
-      const cashTotal = cart.reduce((s, i) => s + i.cashPrice * i.quantity, 0);
       const productName = cart.length > 1 ? `${firstItem.productName} و${cart.length - 1} منتجات أخرى` : firstItem.productName;
 
       // Employees with a normal guarantee follow the employee application path (unchanged).
@@ -190,6 +197,7 @@ export default function CheckoutPage() {
           productName,
           merchantId: firstItem.merchantId,
           merchantName: firstItem.merchantName,
+          currency: payCurrency,
           cashPrice: cashTotal,
           deferredPrice: deferredTotal,
           durationMonths: duration,
@@ -206,6 +214,7 @@ export default function CheckoutPage() {
           productImage: firstItem.productImage,
           merchantId: firstItem.merchantId,
           merchantName: firstItem.merchantName,
+          currency: payCurrency,
           cashPrice: cashTotal,
           deferredPrice: deferredTotal,
           durationMonths: duration,
@@ -377,11 +386,11 @@ export default function CheckoutPage() {
                       <div className="grid grid-cols-2 gap-3 text-sm">
                         <div>
                           <span className="text-muted-foreground">القسط الشهري:</span>
-                          <span className="font-bold text-primary mr-2">{formatCurrency(monthlyInstallment)}</span>
+                          <span className="font-bold text-primary mr-2">{formatCurrency(monthlyInstallment, payCurrency)}</span>
                         </div>
                         <div>
                           <span className="text-muted-foreground">إجمالي المبلغ المؤجل:</span>
-                          <span className="font-bold mr-2">{formatCurrency(deferredTotal)}</span>
+                          <span className="font-bold mr-2">{formatCurrency(deferredTotal, payCurrency)}</span>
                         </div>
                       </div>
                     </div>
@@ -420,6 +429,7 @@ export default function CheckoutPage() {
             <Card className="sticky top-20">
               <CardContent className="p-5 space-y-4">
                 <h2 className="font-bold text-lg">ملخص الطلب</h2>
+                <CurrencySwitch />
                 <Separator />
                 <div className="space-y-2 max-h-48 overflow-y-auto">
                   {cart.map(item => (
@@ -430,7 +440,7 @@ export default function CheckoutPage() {
                         <p className="text-xs text-muted-foreground">{item.quantity}x · {item.paymentType}</p>
                       </div>
                       <span className="text-xs font-medium">
-                        {formatCurrency((item.paymentType === "تقسيط" ? item.deferredPrice : item.cashPrice) * item.quantity)}
+                        {formatCurrency(toPay(paymentType === "تقسيط" ? item.deferredPrice : item.cashPrice, item.currency) * item.quantity, payCurrency)}
                       </span>
                     </div>
                   ))}
@@ -439,17 +449,17 @@ export default function CheckoutPage() {
                 <div className="space-y-2 text-sm">
                   <div className="flex justify-between">
                     <span className="text-muted-foreground">إجمالي المنتجات</span>
-                    <span>{formatCurrency(cartTotal)}</span>
+                    <span>{formatCurrency(orderSubtotal, payCurrency)}</span>
                   </div>
                   <div className="flex justify-between">
                     <span className="text-muted-foreground">رسوم التوصيل</span>
-                    <span>{formatCurrency(deliveryFee)}</span>
+                    <span>{formatCurrency(deliveryFee, payCurrency)}</span>
                   </div>
                 </div>
                 <Separator />
                 <div className="flex justify-between text-base">
                   <span className="font-bold">الإجمالي</span>
-                  <span className="font-bold text-primary">{formatCurrency(grandTotal)}</span>
+                  <span className="font-bold text-primary">{formatCurrency(grandTotal, payCurrency)}</span>
                 </div>
                 <Button type="submit" className="w-full" size="lg" disabled={submitting}>
                   {submitting ? (

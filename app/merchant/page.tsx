@@ -8,7 +8,7 @@ import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
 import { useApp } from "@/lib/store";
 import { formatCurrency } from "@/lib/brand";
-import { Home, Package, ShoppingBag, Boxes, Wallet, Store, Settings } from "lucide-react";
+import { Home, Package, ShoppingBag, Boxes, Wallet, Store, Settings, FileText } from "lucide-react";
 import type { LucideIcon } from "lucide-react";
 import Link from "next/link";
 
@@ -18,11 +18,12 @@ const navItems: { href: string; label: string; icon: LucideIcon }[] = [
   { href: "/merchant/orders", label: "الطلبات", icon: ShoppingBag },
   { href: "/merchant/inventory", label: "المخزون", icon: Boxes },
   { href: "/merchant/settlements", label: "التسويات", icon: Wallet },
+  { href: "/invoices", label: "الفواتير", icon: FileText },
   { href: "/merchant/settings", label: "الإعدادات", icon: Settings },
 ];
 
 export default function MerchantDashboard() {
-  const { currentUser, merchants, products, orders, settlements } = useApp();
+  const { currentUser, merchants, products, orders, settlements, toYER } = useApp();
   const merchant = merchants.find(m => m.userId === currentUser?.id);
   const myProducts = products.filter(p => p.merchantId === merchant?.id);
   const myOrders = orders.filter(o => o.merchantIds.includes(merchant?.id || ""));
@@ -31,9 +32,9 @@ export default function MerchantDashboard() {
   const newOrders = myOrders.filter(o => o.status === "جديد" || o.status === "تمت الموافقة");
   const preparingOrders = myOrders.filter(o => o.status === "قيد التجهيز");
   const completedOrders = myOrders.filter(o => o.status === "تم التسليم");
-  const totalSales = completedOrders.reduce((s, o) => s + o.total, 0);
-  const pendingAmount = mySettlements.filter(s => s.status !== "مدفوع").reduce((s, st) => s + st.merchantAmount, 0);
-  const paidAmount = mySettlements.filter(s => s.status === "مدفوع").reduce((s, st) => s + st.merchantAmount, 0);
+  const totalSales = completedOrders.reduce((s, o) => s + toYER(o.total, o.currency), 0);
+  const pendingAmount = mySettlements.filter(s => s.status !== "مدفوع").reduce((s, st) => s + toYER(st.merchantAmount, st.currency), 0);
+  const paidAmount = mySettlements.filter(s => s.status === "مدفوع").reduce((s, st) => s + toYER(st.merchantAmount, st.currency), 0);
 
   return (
     <DashboardLayout navItems={navItems} title="لوحة التاجر" role="merchant">
@@ -77,7 +78,7 @@ export default function MerchantDashboard() {
                         <TableRow key={o.id}>
                           <TableCell className="text-xs font-medium">{o.orderNumber}</TableCell>
                           <TableCell className="text-xs">{o.customerName}</TableCell>
-                          <TableCell className="text-xs">{formatCurrency(o.total)}</TableCell>
+                          <TableCell className="text-xs">{formatCurrency(o.total, o.currency)}</TableCell>
                           <TableCell><StatusBadge status={o.status} /></TableCell>
                         </TableRow>
                       ))}
@@ -104,7 +105,7 @@ export default function MerchantDashboard() {
                           <p className="text-sm font-medium line-clamp-1">{p.name}</p>
                           <p className="text-xs text-muted-foreground">المخزون: {p.stock}</p>
                         </div>
-                        <span className="text-sm font-bold text-primary">{formatCurrency(p.cashPrice)}</span>
+                        <span className="text-sm font-bold text-primary">{formatCurrency(p.cashPrice, p.currency)}</span>
                       </div>
                     ))}
                   </div>

@@ -46,7 +46,7 @@ export default function AdminProductsPage() {
                     </TableCell>
                     <TableCell className="text-sm">{p.merchantName}</TableCell>
                     <TableCell className="text-sm">{p.category}</TableCell>
-                    <TableCell className="text-sm">{formatCurrency(p.cashPrice)}</TableCell>
+                    <TableCell className="text-sm">{formatCurrency(p.cashPrice, p.currency)}</TableCell>
                     <TableCell className="text-sm">{p.stock}</TableCell>
                     <TableCell>
                       <span className={`text-xs px-2 py-1 rounded-full ${p.visible ? "bg-green-100 text-green-700" : "bg-gray-100 text-gray-700"}`}>

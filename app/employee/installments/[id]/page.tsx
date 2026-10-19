@@ -45,7 +45,7 @@ import { Label } from "@/components/ui/label";
 import { useApp } from "@/lib/store";
 import { formatCurrency } from "@/lib/brand";
 import { useToast } from "@/hooks/use-toast";
-import { Home, ShoppingBag, CreditCard, Wallet, Bell, User, ArrowRight, CalendarClock, Receipt, CheckCircle2, PackagePlus, ClipboardList } from "lucide-react";
+import { Home, ShoppingBag, CreditCard, Wallet, Bell, User, ArrowRight, CalendarClock, Receipt, CheckCircle2, PackagePlus, ClipboardList, FileText } from "lucide-react";
 import type { LucideIcon } from "lucide-react";
 
 const navItems: { href: string; label: string; icon: LucideIcon }[] = [
@@ -55,6 +55,7 @@ const navItems: { href: string; label: string; icon: LucideIcon }[] = [
   { href: "/employee/payments", label: "المدفوعات", icon: Wallet },
   { href: "/request-product", label: "طلب منتج غير مدرج", icon: PackagePlus },
   { href: "/requests", label: "طلباتي الخاصة", icon: ClipboardList },
+  { href: "/invoices", label: "فواتيري", icon: FileText },
   { href: "/employee/notifications", label: "الإشعارات", icon: Bell },
   { href: "/employee/profile", label: "الملف الشخصي", icon: User },
 ];
@@ -158,7 +159,7 @@ export default function InstallmentDetailPage() {
               <p className="text-xs text-muted-foreground">إجمالي المبلغ</p>
             </div>
             <p className="text-lg font-bold">
-              {formatCurrency(contract.totalAmount)}
+              {formatCurrency(contract.totalAmount, contract.currency)}
             </p>
           </CardContent>
         </Card>
@@ -169,7 +170,7 @@ export default function InstallmentDetailPage() {
               <p className="text-xs text-muted-foreground">القسط الشهري</p>
             </div>
             <p className="text-lg font-bold text-primary">
-              {formatCurrency(contract.monthlyInstallment)}
+              {formatCurrency(contract.monthlyInstallment, contract.currency)}
             </p>
           </CardContent>
         </Card>
@@ -180,7 +181,7 @@ export default function InstallmentDetailPage() {
               <p className="text-xs text-muted-foreground">المدفوع</p>
             </div>
             <p className="text-lg font-bold text-green-600">
-              {formatCurrency(contract.paidAmount)}
+              {formatCurrency(contract.paidAmount, contract.currency)}
             </p>
           </CardContent>
         </Card>
@@ -191,7 +192,7 @@ export default function InstallmentDetailPage() {
               <p className="text-xs text-muted-foreground">المتبقي</p>
             </div>
             <p className="text-lg font-bold text-orange-600">
-              {formatCurrency(contract.remainingAmount)}
+              {formatCurrency(contract.remainingAmount, contract.currency)}
             </p>
           </CardContent>
         </Card>
@@ -216,7 +217,7 @@ export default function InstallmentDetailPage() {
                   القسط القادم المستحق رقم {nextDuePayment.number}
                 </p>
                 <p className="text-xs text-muted-foreground mt-0.5">
-                  المبلغ: {formatCurrency(nextDuePayment.amount)} · استحقاق{" "}
+                  المبلغ: {formatCurrency(nextDuePayment.amount, nextDuePayment.currency)} · استحقاق{" "}
                   {new Date(nextDuePayment.dueDate).toLocaleDateString("ar-YE")}
                 </p>
               </div>
@@ -235,7 +236,7 @@ export default function InstallmentDetailPage() {
                     <DialogTitle>دفع القسط رقم {nextDuePayment.number}</DialogTitle>
                     <DialogDescription>
                       قم بتأكيد دفع القسط المستحق بقيمة{" "}
-                      {formatCurrency(nextDuePayment.amount)}
+                      {formatCurrency(nextDuePayment.amount, nextDuePayment.currency)}
                     </DialogDescription>
                   </DialogHeader>
                   <div className="space-y-3 py-2">
@@ -264,7 +265,7 @@ export default function InstallmentDetailPage() {
                       <div className="flex justify-between mt-1">
                         <span className="text-muted-foreground">المبلغ</span>
                         <span className="font-bold">
-                          {formatCurrency(nextDuePayment.amount)}
+                          {formatCurrency(nextDuePayment.amount, nextDuePayment.currency)}
                         </span>
                       </div>
                     </div>
@@ -308,11 +309,11 @@ export default function InstallmentDetailPage() {
               <InfoItem label="المدة" value={`${application.durationMonths} شهر`} />
               <InfoItem
                 label="السعر النقدي"
-                value={formatCurrency(application.cashPrice)}
+                value={formatCurrency(application.cashPrice, application.currency)}
               />
               <InfoItem
                 label="السعر المؤجل"
-                value={formatCurrency(application.deferredPrice)}
+                value={formatCurrency(application.deferredPrice, application.currency)}
               />
               <InfoItem
                 label="تاريخ بدء العقد"
@@ -355,7 +356,7 @@ export default function InstallmentDetailPage() {
                     القسط {p.number}
                   </TableCell>
                   <TableCell className="text-sm">
-                    {formatCurrency(p.amount)}
+                    {formatCurrency(p.amount, p.currency)}
                   </TableCell>
                   <TableCell className="text-sm">
                     {new Date(p.dueDate).toLocaleDateString("ar-YE")}

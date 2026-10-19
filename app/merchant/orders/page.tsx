@@ -10,7 +10,7 @@ import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@
 import { useApp } from "@/lib/store";
 import { formatCurrency } from "@/lib/brand";
 import { ORDER_STATUSES } from "@/lib/constants";
-import { Home, Package, ShoppingBag, Boxes, Wallet, Settings } from "lucide-react";
+import { Home, Package, ShoppingBag, Boxes, Wallet, Settings, FileText } from "lucide-react";
 import type { LucideIcon } from "lucide-react";
 import { toast } from "sonner";
 import type { OrderStatus } from "@/lib/constants";
@@ -21,6 +21,7 @@ const navItems: { href: string; label: string; icon: LucideIcon }[] = [
   { href: "/merchant/orders", label: "الطلبات", icon: ShoppingBag },
   { href: "/merchant/inventory", label: "المخزون", icon: Boxes },
   { href: "/merchant/settlements", label: "التسويات", icon: Wallet },
+  { href: "/invoices", label: "الفواتير", icon: FileText },
   { href: "/merchant/settings", label: "الإعدادات", icon: Settings },
 ];
 
@@ -71,7 +72,7 @@ export default function MerchantOrdersPage() {
                     <TableCell className="text-sm">{o.customerName}</TableCell>
                     <TableCell className="text-sm line-clamp-1 max-w-32">{o.items[0]?.productName}</TableCell>
                     <TableCell className="text-sm">{o.paymentType}</TableCell>
-                    <TableCell className="text-sm">{formatCurrency(o.total)}</TableCell>
+                    <TableCell className="text-sm">{formatCurrency(o.total, o.currency)}</TableCell>
                     <TableCell><StatusBadge status={o.status} /></TableCell>
                     <TableCell className="text-xs text-muted-foreground">{new Date(o.createdAt).toLocaleDateString("ar-YE")}</TableCell>
                     <TableCell>

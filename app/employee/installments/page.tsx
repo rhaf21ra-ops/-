@@ -35,6 +35,7 @@ const navItems: { href: string; label: string; icon: LucideIcon }[] = [
   { href: "/employee/payments", label: "المدفوعات", icon: Wallet },
   { href: "/request-product", label: "طلب منتج غير مدرج", icon: PackagePlus },
   { href: "/requests", label: "طلباتي الخاصة", icon: ClipboardList },
+  { href: "/invoices", label: "فواتيري", icon: FileText },
   { href: "/employee/notifications", label: "الإشعارات", icon: Bell },
   { href: "/employee/profile", label: "الملف الشخصي", icon: User },
 ];
@@ -44,8 +45,7 @@ export default function EmployeeInstallmentsPage() {
     currentUser,
     employees,
     installmentApplications,
-    installmentContracts,
-  } = useApp();
+    installmentContracts, toYER } = useApp();
 
   const employee = employees.find((e) => e.userId === currentUser?.id);
 
@@ -65,10 +65,10 @@ export default function EmployeeInstallmentsPage() {
 
   const activeContracts = myContracts.filter((c) => c.status === "نشط");
   const totalRemaining = activeContracts.reduce(
-    (sum, c) => sum + c.remainingAmount,
+    (sum, c) => sum + toYER(c.remainingAmount, c.currency),
     0
   );
-  const totalPaid = myContracts.reduce((sum, c) => sum + c.paidAmount, 0);
+  const totalPaid = myContracts.reduce((sum, c) => sum + toYER(c.paidAmount, c.currency), 0);
 
   const nextDuePayment = activeContracts
     .flatMap((c) =>
@@ -134,7 +134,7 @@ export default function EmployeeInstallmentsPage() {
         />
         <StatCard
           title="القسط القادم"
-          value={nextDuePayment ? formatCurrency(nextDuePayment.amount) : "—"}
+          value={nextDuePayment ? formatCurrency(nextDuePayment.amount, nextDuePayment.currency) : "—"}
           icon={CalendarClock}
           description={
             nextDuePayment
@@ -159,7 +159,7 @@ export default function EmployeeInstallmentsPage() {
                 <div key={i} className="flex items-center justify-between text-xs text-orange-700">
                   <span>{p.productName} · {p.contractNumber}</span>
                   <span className="font-medium">
-                    {formatCurrency(p.amount)} - {new Date(p.dueDate).toLocaleDateString("ar-YE")}
+                    {formatCurrency(p.amount, p.currency)} - {new Date(p.dueDate).toLocaleDateString("ar-YE")}
                   </span>
                 </div>
               ))}
@@ -219,13 +219,13 @@ export default function EmployeeInstallmentsPage() {
                           {app.productName}
                         </TableCell>
                         <TableCell className="text-sm">
-                          {formatCurrency(app.monthlyInstallment)}
+                          {formatCurrency(app.monthlyInstallment, app.currency)}
                         </TableCell>
                         <TableCell className="text-sm">
                           {app.durationMonths} شهر
                         </TableCell>
                         <TableCell className="text-sm">
-                          {formatCurrency(app.deferredPrice)}
+                          {formatCurrency(app.deferredPrice, app.currency)}
                         </TableCell>
                         <TableCell className="text-sm text-muted-foreground">
                           {new Date(app.createdAt).toLocaleDateString("ar-YE")}
@@ -284,7 +284,7 @@ export default function EmployeeInstallmentsPage() {
                             </p>
                             <p className="font-medium">
                               {nextPayment
-                                ? formatCurrency(nextPayment.amount)
+                                ? formatCurrency(nextPayment.amount, nextPayment.currency)
                                 : "—"}
                             </p>
                           </div>
@@ -305,7 +305,7 @@ export default function EmployeeInstallmentsPage() {
                               المتبقي
                             </p>
                             <p className="font-medium text-orange-600">
-                              {formatCurrency(c.remainingAmount)}
+                              {formatCurrency(c.remainingAmount, c.currency)}
                             </p>
                           </div>
                         </div>

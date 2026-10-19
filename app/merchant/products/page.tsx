@@ -12,9 +12,10 @@ import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogTrigger, DialogFooter, DialogClose } from "@/components/ui/dialog";
 import { ImageFilePicker } from "@/components/ImageFilePicker";
 import { useApp } from "@/lib/store";
-import { formatCurrency, calculateDeferredPrice } from "@/lib/brand";
+import { formatCurrency } from "@/lib/brand";
+import { CURRENCIES, CURRENCY_INFO, roundMoney, asCurrency, type Currency } from "@/lib/currency";
 import { CATEGORIES, GOVERNORATES } from "@/lib/constants";
-import { Home, Package, ShoppingBag, Boxes, Wallet, Settings, Plus, Pencil, Trash2 } from "lucide-react";
+import { Home, Package, ShoppingBag, Boxes, Wallet, Settings, Plus, Pencil, Trash2, FileText } from "lucide-react";
 import type { LucideIcon } from "lucide-react";
 import { useState } from "react";
 import { toast } from "sonner";
@@ -26,24 +27,25 @@ const navItems: { href: string; label: string; icon: LucideIcon }[] = [
   { href: "/merchant/orders", label: "الطلبات", icon: ShoppingBag },
   { href: "/merchant/inventory", label: "المخزون", icon: Boxes },
   { href: "/merchant/settlements", label: "التسويات", icon: Wallet },
+  { href: "/invoices", label: "الفواتير", icon: FileText },
   { href: "/merchant/settings", label: "الإعدادات", icon: Settings },
 ];
 
 export default function MerchantProductsPage() {
-  const { currentUser, merchants, products, addProduct, updateProduct, deleteProduct, isReal } = useApp();
+  const { currentUser, merchants, products, addProduct, updateProduct, deleteProduct, isReal, markup } = useApp();
   const merchant = merchants.find(m => m.userId === currentUser?.id);
   const myProducts = products.filter(p => p.merchantId === merchant?.id);
 
   const [dialogOpen, setDialogOpen] = useState(false);
   const [editingId, setEditingId] = useState<string | null>(null);
   const [formData, setFormData] = useState({
-    name: "", description: "", cashPrice: "", category: "الإلكترونيات", stock: "10",
+    name: "", description: "", cashPrice: "", currency: "YER" as Currency, category: "الإلكترونيات", stock: "10",
     images: [] as string[],
     installmentAvailable: true, city: merchant?.city || "أمانة العاصمة",
   });
 
   const resetForm = () => {
-    setFormData({ name: "", description: "", cashPrice: "", category: "الإلكترونيات", stock: "10", images: [] as string[], installmentAvailable: true, city: merchant?.city || "أمانة العاصمة" });
+    setFormData({ name: "", description: "", cashPrice: "", currency: "YER" as Currency, category: "الإلكترونيات", stock: "10", images: [] as string[], installmentAvailable: true, city: merchant?.city || "أمانة العاصمة" });
     setEditingId(null);
   };
 
@@ -64,7 +66,8 @@ export default function MerchantProductsPage() {
       name: formData.name,
       description: formData.description,
       cashPrice,
-      deferredPrice: calculateDeferredPrice(cashPrice),
+      currency: formData.currency,
+      deferredPrice: roundMoney(cashPrice * (1 + markup / 100), formData.currency),
       category: formData.category as Product["category"],
       stock: Number(formData.stock),
       images: formData.images,
@@ -91,7 +94,7 @@ export default function MerchantProductsPage() {
   const handleEdit = (p: Product) => {
     setEditingId(p.id);
     setFormData({
-      name: p.name, description: p.description, cashPrice: String(p.cashPrice),
+      name: p.name, description: p.description, cashPrice: String(p.cashPrice), currency: asCurrency(p.currency),
       category: p.category, stock: String(p.stock), images: [...p.images],
       installmentAvailable: p.installmentAvailable, city: p.city,
     });
@@ -129,8 +132,15 @@ export default function MerchantProductsPage() {
                   </Select>
                 </div>
                 <div>
-                  <Label className="mb-1.5 block">السعر النقدي (ر.ي) *</Label>
-                  <Input type="number" value={formData.cashPrice} onChange={e => setFormData({ ...formData, cashPrice: e.target.value })} required />
+                  <Label className="mb-1.5 block">السعر النقدي *</Label>
+                  <div className="flex gap-2">
+                    <Input type="number" min="0" step={formData.currency === "YER" ? "1" : "0.01"} value={formData.cashPrice} onChange={e => setFormData({ ...formData, cashPrice: e.target.value })} required />
+                    <Select value={formData.currency} onValueChange={v => setFormData({ ...formData, currency: v as Currency })}>
+                      <SelectTrigger className="w-40 shrink-0"><SelectValue /></SelectTrigger>
+                      <SelectContent>{CURRENCIES.map(c => <SelectItem key={c} value={c}>{CURRENCY_INFO[c].label}</SelectItem>)}</SelectContent>
+                    </Select>
+                  </div>
+                  <p className="mt-1 text-xs text-muted-foreground">اكتب السعر بالعملة التي تبيع بها. يستطيع المشتري الدفع أو التقسيط بأي عملة من الثلاث، ويُحوَّل السعر تلقائياً.</p>
                 </div>
                 <div>
                   <Label className="mb-1.5 block">المخزون</Label>
@@ -192,8 +202,8 @@ export default function MerchantProductsPage() {
                       </div>
                     </TableCell>
                     <TableCell className="text-sm">{p.category}</TableCell>
-                    <TableCell className="text-sm">{formatCurrency(p.cashPrice)}</TableCell>
-                    <TableCell className="text-sm">{formatCurrency(p.deferredPrice)}</TableCell>
+                    <TableCell className="text-sm">{formatCurrency(p.cashPrice, p.currency)}</TableCell>
+                    <TableCell className="text-sm">{formatCurrency(p.deferredPrice, p.currency)}</TableCell>
                     <TableCell className="text-sm">{p.stock}</TableCell>
                     <TableCell className="text-sm">{p.installmentAvailable ? "نعم" : "لا"}</TableCell>
                     <TableCell>

@@ -6,6 +6,7 @@ import { toast } from "sonner";
 import { loadSnapshot, db, installmentIndex, ORDER_DB, DELIVERY_DB, type Result } from "@/lib/real-data";
 import { setBranches } from "@/lib/branches";
 import { setGuaranteeTypes } from "@/lib/guarantees";
+import { DEFAULT_RATES, convertRounded, convertMoney, roundMoney, asCurrency, isCurrency, type Currency, type Rates } from "@/lib/currency";
 import type {
   User,
   Employee,
@@ -23,6 +24,7 @@ import type {
   CartItem,
   IdentityVerification,
   InstallmentRequest,
+  Invoice,
 } from "./types";
 import {
   seedUsers,
@@ -60,6 +62,9 @@ interface AppState {
   notifications: Notification[];
   auditLogs: AuditLog[];
   identityVerifications: IdentityVerification[];
+  // Currencies and invoices
+  invoices: Invoice[];
+  rates: Rates;
   // Cart
   cart: CartItem[];
 }
@@ -76,6 +81,15 @@ interface AppContextType extends AppState {
   refresh: () => Promise<void>;
   /** Real mode: percent added to the cash price for installments (platform default or the owner's per-user override). */
   markup: number;
+  /** Currency the buyer pays / installs in (YER, SAR or USD). Saved in this browser. */
+  payCurrency: Currency;
+  setPayCurrency: (c: Currency) => void;
+  /** Unit price of a product converted and rounded in the pay currency (same rule as the server). */
+  toPay: (amount: number, from?: Currency) => number;
+  /** Any amount to Yemeni rials, for totals that mix currencies. */
+  toYER: (amount: number, from?: Currency) => number;
+  /** Owner only: set the SAR or USD rate (YER per one unit). */
+  setRate: (code: Currency, rate: number) => Promise<boolean>;
   /** Real mode checkout: creates the order (and installment application) on the server. */
   placeOrder: (p: Parameters<typeof db.placeOrder>[0]) => Promise<Result>;
   /** Real mode: an employee picks the company they work for. */
@@ -162,6 +176,7 @@ function resyncCounters(st: AppState) {
   employeeCounter = Math.max(employeeCounter, maxTail(st.employees) + 1);
   verificationCounter = Math.max(verificationCounter, maxTail(st.identityVerifications) + 1);
   installmentReqCounter = Math.max(installmentReqCounter, maxNumber(st.installmentRequests, "requestNumber") + 1);
+  invoiceCounter = Math.max(invoiceCounter, (st.invoices ?? []).reduce((a, v) => Math.max(a, tailNum(v.invoiceNumber)), 0) + 1);
 }
 
 function daysAgo(days: number): string {
@@ -170,13 +185,41 @@ function daysAgo(days: number): string {
   return d.toISOString();
 }
 
+let invoiceCounter = 1;
+const hex16 = () => Array.from({ length: 16 }, () => Math.floor(Math.random() * 16).toString(16)).join("").toUpperCase();
+
+/** DEMO mode only: the database issues real invoices (see supabase migration 0018). */
+function makeDemoInvoices(order: Order, buyerId: string, markup: number): Invoice[] {
+  const cur = asCurrency(order.currency);
+  const groups = new Map<string, Order["items"]>();
+  for (const it of order.items) groups.set(it.merchantId, [...(groups.get(it.merchantId) ?? []), it]);
+  const installment = order.paymentType === "تقسيط";
+  const months = order.months ?? 12;
+  return [...groups.entries()].map(([merchantId, items]) => {
+    const sub = items.reduce((s, i) => s + i.cashPrice * i.quantity, 0);
+    const deferred = installment ? roundMoney(sub * (1 + markup / 100), cur) : undefined;
+    return {
+      id: `inv-${Date.now()}-${invoiceCounter}`,
+      invoiceNumber: `INV-${new Date().getFullYear()}-${String(invoiceCounter++).padStart(6, "0")}`,
+      verifyCode: hex16(),
+      orderId: order.id, orderNumber: order.orderNumber,
+      kind: installment ? "installment_sale" : "sale", status: "issued", currency: cur, issuedAt: new Date().toISOString(),
+      buyerId, buyerName: order.customerName, buyerPhone: order.phone, buyerAddress: `${order.governorate} - ${order.city} - ${order.address}`,
+      merchantId, merchantName: items[0]?.merchantName ?? "",
+      items: items.map(i => ({ name: i.productName, qty: i.quantity, unitPrice: i.cashPrice, lineTotal: i.cashPrice * i.quantity })),
+      subtotal: sub, discount: 0, shipping: 0, total: sub,
+      ...(installment ? { months, markupPercent: markup, deferredTotal: deferred, monthly: roundMoney((deferred ?? 0) / months, cur) } : {}),
+    } as Invoice;
+  });
+}
+
 export function AppProvider({ children }: { children: React.ReactNode }) {
   const real = isSupabaseConfigured;
   const [markup, setMarkup] = useState(22);
   const [state, setState] = useState<AppState>(real ? {
     currentUser: null, users: [], employees: [], companies: [], merchants: [], products: [], orders: [], installmentApplications: [],
     installmentContracts: [], payments: [], settlements: [], deliveries: [], notifications: [], auditLogs: [], identityVerifications: [],
-    installmentRequests: [], cart: [],
+    installmentRequests: [], cart: [], invoices: [], rates: DEFAULT_RATES,
   } : {
     currentUser: null,
     users: seedUsers,
@@ -204,7 +247,17 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
       { id: "ir-4", requestNumber: "REQ-1004", userId: "u-customer", userName: "سارة أحمد العمري", userRole: "customer", productId: "p-12", productName: "تكييف هواء شباك 1 طن", productImage: "", merchantId: "m-3", merchantName: "متجر الكهرباء", cashPrice: 95000, deferredPrice: 115900, durationMonths: 6, monthlyInstallment: 19317, status: "مرفوض", createdAt: daysAgo(30), reviewedAt: daysAgo(25), reviewedBy: "مدير المنصة", rejectionReason: "تجاوز الحد الشرائي المتاح", notes: "مرفوض بسبب تجاوز الحد" },
     ],
     cart: [],
+    invoices: [],
+    rates: DEFAULT_RATES,
   });
+  const [payCurrency, setPayCurrencyState] = useState<Currency>("YER");
+  const setPayCurrency = useCallback((c: Currency) => {
+    setPayCurrencyState(c);
+    try { localStorage.setItem("qistuha-pay-currency", c); } catch {}
+  }, []);
+  useEffect(() => {
+    try { const c = localStorage.getItem("qistuha-pay-currency"); if (isCurrency(c)) setPayCurrencyState(c); } catch {}
+  }, []);
 
   const [hydrated, setHydrated] = useState(false);
 
@@ -427,9 +480,20 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
     setState(prev => ({ ...prev, cart: [] }));
   }, []);
 
+  const toPay = useCallback((amount: number, from: Currency = "YER") => convertRounded(amount, from, payCurrency, state.rates), [payCurrency, state.rates]);
+  const toYER = useCallback((amount: number, from: Currency = "YER") => convertMoney(amount, from, "YER", state.rates), [state.rates]);
+  const setRate = useCallback(async (code: Currency, rate: number): Promise<boolean> => {
+    if (code === "YER") return false;
+    if (!(rate > 0)) { toast.error("سعر الصرف غير صحيح"); return false; }
+    if (isSupabaseConfigured) return act(db.setRate(code, rate), "تم حفظ سعر الصرف");
+    setState(prev => ({ ...prev, rates: { ...prev.rates, [code]: rate } }));
+    toast.success("تم حفظ سعر الصرف");
+    return true;
+  }, [act]);
+
   const cartTotal = state.cart.reduce((sum, item) => {
     const price = item.paymentType === "تقسيط" ? item.deferredPrice : item.cashPrice;
-    return sum + price * item.quantity;
+    return sum + convertRounded(price, asCurrency(item.currency), payCurrency, state.rates) * item.quantity;
   }, 0);
 
   const cartCount = state.cart.reduce((sum, item) => sum + item.quantity, 0);
@@ -442,9 +506,9 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
       orderNumber: `ORD-${orderCounter++}`,
       createdAt: new Date().toISOString(),
     };
-    setState(prev => ({ ...prev, orders: [newOrder, ...prev.orders] }));
+    setState(prev => ({ ...prev, orders: [newOrder, ...prev.orders], invoices: [...makeDemoInvoices(newOrder, prev.currentUser?.id || newOrder.customerId, markup), ...prev.invoices] }));
     return newOrder;
-  }, []);
+  }, [markup]);
 
   const updateOrderStatus = useCallback((orderId: string, status: Order["status"]) => {
     if (isSupabaseConfigured) { const st = ORDER_DB[status]; if (!st) { toast.error("حالة غير مسموحة"); return Promise.resolve(false); } return act(db.setOrderStatus(orderId, st), "تم تحديث الطلب"); }
@@ -1107,6 +1171,11 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
     isReal: real,
     refresh,
     markup,
+    payCurrency,
+    setPayCurrency,
+    toPay,
+    toYER,
+    setRate,
     placeOrder,
     joinCompany,
     setMerchantStatus,

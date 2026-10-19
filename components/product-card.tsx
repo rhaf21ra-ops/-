@@ -1,5 +1,6 @@
 "use client"
 import Link from "next/link"
+import { MoneyApprox } from "@/components/MoneyApprox"
 import Image from "next/image"
 import { ShoppingCart, Star, MapPin, CreditCard } from "lucide-react"
 import { Product } from "@/lib/types"
@@ -64,13 +65,14 @@ export function ProductCard({ product }: { product: Product }) {
         </div>
         <div className="mt-3 space-y-1">
           <div className="flex items-baseline gap-2">
-            <span className="text-lg font-bold text-primary">{formatCurrency(product.cashPrice)}</span>
+            <span className="text-lg font-bold text-primary">{formatCurrency(product.cashPrice, product.currency)}</span>
             <span className="text-xs text-muted-foreground">نقدي</span>
           </div>
+          <MoneyApprox amount={product.cashPrice} currency={product.currency} />
           {product.installmentAvailable && (
             <div className="flex items-center gap-1.5">
               <CreditCard className="h-3.5 w-3.5 text-primary" />
-              <span className="text-xs font-medium text-primary">{formatCurrency(product.deferredPrice)} تقسيط</span>
+              <span className="text-xs font-medium text-primary">{formatCurrency(product.deferredPrice, product.currency)} تقسيط</span>
             </div>
           )}
         </div>

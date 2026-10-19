@@ -1,3 +1,4 @@
+import type { Currency } from "./currency";
 import type {
   Category,
   OrderStatus,
@@ -99,6 +100,7 @@ export interface Product {
   name: string;
   description: string;
   cashPrice: number;
+  currency?: Currency;
   deferredPrice: number;
   category: Category;
   stock: number;
@@ -127,12 +129,15 @@ export interface OrderItem {
 }
 
 export interface Order {
+  /** Installment duration in months (installment orders only). */
+  months?: number;
   id: string;
   orderNumber: string;
   customerName: string;
   customerId: string;
   items: OrderItem[];
   total: number;
+  currency?: Currency;
   paymentType: OrderType;
   status: OrderStatus;
   city: string;
@@ -157,6 +162,7 @@ export interface InstallmentApplication {
   merchantId: string;
   merchantName: string;
   cashPrice: number;
+  currency?: Currency;
   deferredPrice: number;
   durationMonths: number;
   monthlyInstallment: number;
@@ -176,6 +182,7 @@ export interface InstallmentContract {
   employeeName: string;
   productName: string;
   totalAmount: number;
+  currency?: Currency;
   monthlyInstallment: number;
   durationMonths: number;
   paidAmount: number;
@@ -190,6 +197,7 @@ export interface InstallmentContract {
 export interface InstallmentPaymentSchedule {
   number: number;
   amount: number;
+  currency?: Currency;
   dueDate: string;
   status: InstallmentPaymentStatus;
   paidAt?: string;
@@ -201,6 +209,7 @@ export interface Payment {
   contractId: string;
   employeeName: string;
   amount: number;
+  currency?: Currency;
   status: PaymentStatus;
   method: string;
   createdAt: string;
@@ -214,6 +223,7 @@ export interface Settlement {
   orderId: string;
   orderNumber: string;
   saleValue: number;
+  currency?: Currency;
   merchantAmount: number;
   status: SettlementStatus;
   date: string;
@@ -265,6 +275,7 @@ export interface CartItem {
   merchantName: string;
   quantity: number;
   cashPrice: number;
+  currency?: Currency;
   deferredPrice: number;
   paymentType: OrderType;
   durationMonths?: number;
@@ -302,6 +313,7 @@ export interface InstallmentRequest {
   merchantId: string;
   merchantName: string;
   cashPrice: number;
+  currency?: Currency;
   deferredPrice: number;
   durationMonths: number;
   monthlyInstallment: number;
@@ -336,3 +348,32 @@ export type {
   InstallmentRequestStatus,
   UserStatus,
 } from "./constants";
+
+/** A real invoice (one per merchant per order). Amounts are in `currency`. */
+export interface Invoice {
+  id: string;
+  invoiceNumber: string;
+  verifyCode: string;
+  orderId: string;
+  orderNumber: string;
+  kind: "sale" | "installment_sale";
+  status: "issued" | "void";
+  currency: Currency;
+  issuedAt: string;
+  buyerId: string;
+  buyerName: string;
+  buyerPhone: string;
+  buyerAddress: string;
+  merchantId: string;
+  merchantName: string;
+  items: { name: string; qty: number; unitPrice: number; lineTotal: number; origCurrency?: Currency; origUnitPrice?: number }[];
+  subtotal: number;
+  discount: number;
+  shipping: number;
+  total: number;
+  months?: number;
+  markupPercent?: number;
+  deferredTotal?: number;
+  monthly?: number;
+  contractId?: string;
+}
