@@ -84,3 +84,12 @@
 - الـPDF يُبنى في المتصفح بمكتبتي `jspdf` و`html2canvas`، والـQR بمكتبة `qrcode` (أُضيفت إلى package.json).
 - اختبارات القاعدة: `supabase/tests/currency_invoices_test.sql` (76 فحصاً).
 - في الوضع التجريبي (بلا Supabase) تُصدر الفواتير داخل المتصفح عند إنشاء الطلب.
+
+## الإطلاق الحقيقي المجاني (خطوة بخطوة)
+كل ما يلي مجاني: GitHub (مستودعك) + Netlify (الخطة المجانية) + Supabase (الخطة المجانية).
+1. **Supabase:** مشروع جديد. Authentication > Providers > Email: أوقف **Confirm email**. ثم SQL Editor: الصق `supabase/setup_all.sql` كاملاً ونفّذه **مرة واحدة** على مشروع فارغ (يشمل الجداول والصلاحيات والفروع والفواتير والعملات).
+2. **Netlify:** Add new site > Import from Git > المستودع. أضف المتغيرات `NEXT_PUBLIC_SUPABASE_URL` و`NEXT_PUBLIC_SUPABASE_PUBLISHABLE_KEY` (مفتاح publishable/anon) و`SUPABASE_SERVICE_ROLE_KEY` (Secret، لا تضعه في أي ملف ولا ترسله لأحد). ثم Deploys > Clear cache and deploy.
+3. افتح `/status` في موقعك: يجب أن تظهر كل الفحوص خضراء.
+4. سجّل حسابك من `/register`، ثم نفّذ `supabase/create_owner.sql` ببريدك ليصبح المالك.
+5. من `/admin/settings` اضبط أسعار الصرف، ومن `/admin/staff` أنشئ موظفيك وصلاحياتهم.
+حدود المجاني: Supabase يوقف المشروع بعد أسبوع من عدم الاستخدام ويحدد قاعدة البيانات بـ500MB والملفات بـ1GB، وNetlify 100GB نقل شهرياً. يكفي للتشغيل التجريبي الحقيقي، وللإنتاج الكبير يلزم الترقية.
