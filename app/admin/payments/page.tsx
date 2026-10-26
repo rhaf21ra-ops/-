@@ -40,10 +40,10 @@ export default function AdminPaymentsPage() {
     addAuditLog({
       actor: currentUser?.name || "مدير",
       actorRole: "admin",
-      action: "تسجيل دفعة تجريبية",
+      action: "تسجيل دفعة",
       entity: "Payment",
       entityId: selectedContractId,
-      details: `تسجيل دفعة تجريبية بقيمة ${formatCurrency(amt)} للعقد ${contract.contractNumber}`,
+      details: `تسجيل دفعة بقيمة ${formatCurrency(amt)} للعقد ${contract.contractNumber}`,
     });
     if (!isReal) toast.success("تم تسجيل الدفعة بنجاح");
     setDialogOpen(false);
@@ -57,10 +57,10 @@ export default function AdminPaymentsPage() {
         <h1 className="text-2xl font-bold">إدارة المدفوعات</h1>
         <Dialog open={dialogOpen} onOpenChange={setDialogOpen}>
           <DialogTrigger asChild>
-            <Button><Plus className="h-4 w-4 ml-2" /> تسجيل دفعة تجريبية</Button>
+            <Button><Plus className="h-4 w-4 ml-2" /> تسجيل دفعة</Button>
           </DialogTrigger>
           <DialogContent>
-            <DialogHeader><DialogTitle>تسجيل دفعة تجريبية</DialogTitle></DialogHeader>
+            <DialogHeader><DialogTitle>تسجيل دفعة</DialogTitle></DialogHeader>
             <form onSubmit={handleRecordPayment} className="space-y-4">
               <div>
                 <Label className="mb-1.5 block">العقد *</Label>

@@ -24,21 +24,14 @@ export default function FinancialDashboardPage() {
   const totalRemaining = activeContracts.reduce((sum, c) => sum + toYER(c.remainingAmount, c.currency), 0);
 
   return (
-    <DashboardLayout navItems={navItems} title="الجهة المالية التجريبية" role="admin">
+    <DashboardLayout navItems={navItems} title="الجهة المالية" role="admin">
       <div className="mb-6">
         <h1 className="text-2xl font-bold flex items-center gap-2">
           <Landmark className="h-6 w-6 text-primary" />
           لوحة الجهة المالية
         </h1>
-        <p className="text-muted-foreground text-sm mt-1">عرض تجريبي للجهة المالية</p>
+        <p className="text-muted-foreground text-sm mt-1">لوحة الجهة المالية</p>
       </div>
-
-      <Alert className="border-blue-200 bg-blue-50 mb-6">
-        <Info className="h-4 w-4 text-blue-600" />
-        <AlertDescription className="text-sm text-blue-800">
-          هذه لوحة تجريبية للجهة المالية. التكامل الفعلي مع أي بنك أو جهة مالية يتطلب اتفاقية رسمية وAPI معتمد.
-        </AlertDescription>
-      </Alert>
 
       <div className="grid grid-cols-2 lg:grid-cols-4 gap-3 mb-6">
         <StatCard title="طلبات قيد المراجعة" value={pendingApplications.length} icon={CreditCard} description="بانتظار الدراسة" />

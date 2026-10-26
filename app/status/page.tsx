@@ -22,7 +22,7 @@ export default function StatusPage() {
     add({
       name: "متغيرات Netlify داخل هذا البناء",
       ok: isSupabaseConfigured,
-      detail: isSupabaseConfigured ? "موجودة (وضع حقيقي)" : "غير موجودة، لذلك الموقع في الوضع التجريبي",
+      detail: isSupabaseConfigured ? "موجودة" : "غير موجودة: أضفها في Netlify ثم أعد النشر",
       fix: isSupabaseConfigured ? undefined : "أضف NEXT_PUBLIC_SUPABASE_URL ومفتاح Supabase العام في Netlify، ثم من Deploys اختر Trigger deploy > Clear cache and deploy site. تغيير المتغيرات لا يظهر إلا بعد إعادة بناء جديدة.",
     });
     if (!isSupabaseConfigured) { setRunning(false); return; }

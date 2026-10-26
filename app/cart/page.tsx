@@ -196,7 +196,7 @@ export default function CartPage() {
                 </Button>
                 <div className="flex items-center justify-center gap-2 text-xs text-muted-foreground">
                   <Wallet className="h-4 w-4" />
-                  دفع آمن - نسخة تجريبية
+                  دفع آمن
                 </div>
               </CardContent>
             </Card>

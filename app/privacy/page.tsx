@@ -37,10 +37,10 @@ export default function PrivacyPage() {
               <p>تستخدم المنصة ملفات ارتباط محلية (Local Storage) لحفظ حالة تسجيل الدخول ومحتويات السلة. لا تُستخدم ملفات ارتباط لتتبع سلوكك خارج المنصة.</p>
             </section>
             <section>
-              <h2 className="font-bold text-foreground text-lg mb-2">7. البيانات التجريبية</h2>
-              <p>جميع البيانات المعروضة في هذه النسخة هي بيانات تجريبية وهمية ولا تمثل أشخاصاً أو شركات حقيقية. لا تُخزن أي بيانات مالية حقيقية.</p>
+              <h2 className="font-bold text-foreground text-lg mb-2">7. حماية البيانات</h2>
+              <p>تُخزَّن بياناتك في قاعدة بيانات محمية بصلاحيات وصول صارمة، ولا يطّلع عليها إلا من يملك الصلاحية. صور التحقق من الهوية لا تُعرض إلا للمراجعين المخوّلين.</p>
             </section>
-            <p className="text-xs text-muted-foreground pt-4 border-t">آخر تحديث: سبتمبر 2026 - هذه سياسة تجريبية لنسخة Demo</p>
+            <p className="text-xs text-muted-foreground pt-4 border-t">آخر تحديث: سبتمبر 2026</p>
           </CardContent>
         </Card>
       </div>

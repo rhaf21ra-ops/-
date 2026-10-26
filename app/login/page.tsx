@@ -59,9 +59,6 @@ function LoginContent() {
               <div className="flex h-14 w-14 mx-auto items-center justify-center rounded-2xl bg-primary text-primary-foreground text-2xl font-bold mb-2">س</div>
               <CardTitle className="text-2xl">تسجيل الدخول</CardTitle>
               <p className="text-sm text-muted-foreground">مرحباً بك في {BRAND.name}</p>
-              {!isSupabaseConfigured && (
-                <p className="mt-2 rounded-lg bg-amber-50 p-2 text-xs text-amber-800">وضع تجريبي: أنشئ حساباً جديداً وجرّب كل الصلاحيات، والبيانات محفوظة في هذا المتصفح فقط. دخول المالك والموظفين من صفحة دخول الإدارة.</p>
-              )}
             </CardHeader>
             <CardContent className="space-y-4">
               {error && (

@@ -106,10 +106,6 @@ export default function RequestProductPage() {
         ))}
       </ol>
 
-      {requestsAreDemo && (
-        <Alert className="mb-4"><AlertDescription>وضع تجريبي: الطلبات تُحفظ في هذا المتصفح فقط حتى تُربط قاعدة البيانات.</AlertDescription></Alert>
-      )}
-
       {!authLoading && !user ? (
         <Card><CardContent className="p-6 text-center space-y-3">
           <p>سجّل الدخول (كعميل أو موظف) لإرسال طلب منتج.</p>

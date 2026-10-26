@@ -332,7 +332,7 @@ export default function ProductDetailPage() {
                     </p>
                   </div>
                   <p className="text-[10px] text-muted-foreground mt-2 text-center">
-                    * هذه أرقام تجريبية توضيحية وليست عرضاً مالياً حقيقياً
+                    * القسط تقريبي ويُثبَّت عند تأكيد الطلب
                   </p>
                 </CardContent>
               </Card>
