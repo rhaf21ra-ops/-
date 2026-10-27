@@ -3208,3 +3208,259 @@ END $$;
 -- تحديث أسعار الصرف الافتراضية (عدلها قبل الإطلاق حسب السوق)
 -- INSERT INTO platform_settings ...
 
+-- المرحلة 1: الأساس التكاملي - قسطها v2
+-- الأنظمة: 1 API Engine, 2 مواقع المستخدمين, 3 بريد الفروع, 4-6 إرسال وتسجيل البريد
+-- آمن: IF NOT EXISTS + لا يحذف بيانات موجودة
+
+-- ═══════════════════════════════════════════════════════════════
+-- 1) API & Integrations Engine
+-- ═══════════════════════════════════════════════════════════════
+create table if not exists integrations (
+  id uuid primary key default gen_random_uuid(),
+  name text not null,
+  service_name text not null,
+  service_type text not null check (service_type in ('shipping','payment','sms','maps','identity','bank','email','other')),
+  api_url text not null,
+  api_key_encrypted text,
+  secret_encrypted text,
+  headers jsonb not null default '{}'::jsonb,
+  params jsonb not null default '{}'::jsonb,
+  method text not null default 'POST' check (method in ('GET','POST','PUT','DELETE','PATCH')),
+  body_template jsonb,
+  description text,
+  is_active boolean not null default true,
+  last_test_status text check (last_test_status in ('success','failed')),
+  last_test_at timestamptz,
+  last_error text,
+  created_by uuid references auth.users(id),
+  created_at timestamptz not null default now(),
+  updated_at timestamptz not null default now()
+);
+
+create table if not exists integration_logs (
+  id uuid primary key default gen_random_uuid(),
+  integration_id uuid references integrations(id) on delete set null,
+  order_id uuid references orders(id) on delete set null,
+  request jsonb,
+  response jsonb,
+  status text not null check (status in ('success','failed','pending')),
+  error text,
+  duration_ms int,
+  created_at timestamptz not null default now()
+);
+create index if not exists idx_integration_logs_integration on integration_logs(integration_id);
+create index if not exists idx_integration_logs_order on integration_logs(order_id);
+
+-- ═══════════════════════════════════════════════════════════════
+-- 2) نظام مواقع المستخدمين (العملاء فقط)
+-- ═══════════════════════════════════════════════════════════════
+create table if not exists user_addresses (
+  id uuid primary key default gen_random_uuid(),
+  user_id uuid not null references auth.users(id) on delete cascade,
+  label text not null check (label in ('المنزل','العمل','موقع آخر') or length(label) > 0),
+  label_custom text,
+  address_text text,
+  lat double precision not null check (lat between -90 and 90),
+  lng double precision not null check (lng between -180 and 180),
+  is_default boolean not null default false,
+  created_at timestamptz not null default now(),
+  updated_at timestamptz not null default now()
+);
+create index if not exists idx_user_addresses_user on user_addresses(user_id);
+
+-- نسخة مجمدة من الموقع مع كل طلب (لا تتغير بتغيير العنوان لاحقاً)
+create table if not exists order_locations (
+  id uuid primary key default gen_random_uuid(),
+  order_id uuid not null unique references orders(id) on delete cascade,
+  user_address_id uuid references user_addresses(id) on delete set null,
+  label text,
+  address_text text,
+  lat double precision check (lat between -90 and 90),
+  lng double precision check (lng between -180 and 180),
+  created_at timestamptz not null default now()
+);
+create index if not exists idx_order_locations_order on order_locations(order_id);
+
+-- ═══════════════════════════════════════════════════════════════
+-- 3) بريد الفروع
+-- ═══════════════════════════════════════════════════════════════
+alter table branches add column if not exists branch_email text;
+-- تحقق بسيط للبريد (اختياري)
+-- لا نضع check صارم حتى لا نكسر بيانات قديمة
+
+create table if not exists branch_email_logs (
+  id uuid primary key default gen_random_uuid(),
+  order_id uuid not null references orders(id) on delete cascade,
+  branch_id uuid not null references branches(id) on delete cascade,
+  branch_email text not null,
+  status text not null check (status in ('sent','failed','pending','retry')),
+  attempts int not null default 0,
+  last_error text,
+  email_subject text,
+  email_body text,
+  sent_at timestamptz,
+  created_at timestamptz not null default now()
+);
+create index if not exists idx_branch_email_logs_order on branch_email_logs(order_id);
+create index if not exists idx_branch_email_logs_branch on branch_email_logs(branch_id);
+create index if not exists idx_branch_email_logs_status on branch_email_logs(status);
+
+-- ═══════════════════════════════════════════════════════════════
+-- RLS للجداول الجديدة
+-- ═══════════════════════════════════════════════════════════════
+alter table integrations enable row level security;
+alter table integration_logs enable row level security;
+alter table user_addresses enable row level security;
+alter table order_locations enable row level security;
+alter table branch_email_logs enable row level security;
+
+-- Integrations: المدير فقط
+do $$ begin
+  if not exists (select 1 from pg_policies where policyname='admin_integrations' and tablename='integrations') then
+    create policy admin_integrations on integrations for all using (is_admin()) with check (is_admin());
+  end if;
+  if not exists (select 1 from pg_policies where policyname='admin_integration_logs' and tablename='integration_logs') then
+    create policy admin_integration_logs on integration_logs for all using (is_admin()) with check (is_admin());
+  end if;
+  if not exists (select 1 from pg_policies where policyname='admin_branch_email_logs' and tablename='branch_email_logs') then
+    create policy admin_branch_email_logs on branch_email_logs for all using (is_admin()) with check (is_admin());
+  end if;
+end $$;
+
+-- user_addresses: كل مستخدم يرى عناوينه فقط
+do $$ begin
+  if not exists (select 1 from pg_policies where policyname='own_addresses' and tablename='user_addresses') then
+    create policy own_addresses on user_addresses for all using (user_id = auth.uid()) with check (user_id = auth.uid());
+  end if;
+end $$;
+
+-- order_locations: يراها صاحب الطلب والمدير
+do $$ begin
+  if not exists (select 1 from pg_policies where policyname='own_order_locations' and tablename='order_locations') then
+    create policy own_order_locations on order_locations for select using (
+      exists (select 1 from orders o where o.id = order_id and o.user_id = auth.uid()) or is_admin()
+    );
+  end if;
+  if not exists (select 1 from pg_policies where policyname='insert_order_locations' and tablename='order_locations') then
+    create policy insert_order_locations on order_locations for insert with check (
+      exists (select 1 from orders o where o.id = order_id and o.user_id = auth.uid()) or is_admin()
+    );
+  end if;
+end $$;
+
+-- تحديث updated_at تلقائياً
+create or replace function update_updated_at() returns trigger language plpgsql as $$
+begin new.updated_at = now(); return new; end $$;
+
+drop trigger if exists trg_integrations_updated on integrations;
+create trigger trg_integrations_updated before update on integrations for each row execute function update_updated_at();
+drop trigger if exists trg_user_addresses_updated on user_addresses;
+create trigger trg_user_addresses_updated before update on user_addresses for each row execute function update_updated_at();
+
+-- بيانات أولية: مثال تكامل بريد (للاختبار)
+insert into integrations (name, service_name, service_type, api_url, method, description, is_active)
+values ('بريد الفروع - تجريبي', 'Branch Email', 'email', 'https://api.resend.com/emails', 'POST', 'إرسال تفاصيل طلب التقسيط لبريد الفرع المختار - يُفعل بعد إعداد API Key', false)
+on conflict do nothing;
+-- المرحلة 2: التجارة والولاء - قسطها v2
+-- 7 حاسبة، 8 كوبونات، 9 نقاط، 18 إحالة، 19 مفضلة
+
+-- 7) حاسبة التقسيط - خطط قابلة للتعديل
+create table if not exists installment_plans_config (
+  id uuid primary key default gen_random_uuid(),
+  name text not null, -- 3 أشهر، 6 أشهر...
+  months int not null check (months > 0),
+  profit_rate numeric(5,2) not null default 0, -- نسبة الربح %
+  fees numeric(10,2) not null default 0,
+  is_active boolean not null default true,
+  merchant_id uuid references merchants(id) on delete set null, -- null = عام
+  created_at timestamptz default now()
+);
+insert into installment_plans_config (name, months, profit_rate) values
+('3 أشهر',3,5),('6 أشهر',6,8),('9 أشهر',9,12),('12 شهراً',12,15),('18 شهراً',18,20),('24 شهراً',24,22)
+on conflict do nothing;
+
+-- 8) نظام الكوبونات المتكامل
+create table if not exists coupons_ext (
+  id uuid primary key default gen_random_uuid(),
+  code text unique not null,
+  discount_type text not null check (discount_type in ('percent','fixed')),
+  discount_value numeric(10,2) not null,
+  min_purchase numeric(10,2) default 0,
+  start_at timestamptz,
+  end_at timestamptz,
+  max_uses int,
+  used_count int not null default 0,
+  is_active boolean not null default true,
+  merchant_id uuid references merchants(id) on delete set null, -- null = عام (الإدارة)
+  created_by uuid references auth.users(id),
+  created_at timestamptz default now()
+);
+create table if not exists coupon_products (coupon_id uuid references coupons_ext(id) on delete cascade, product_id uuid references products(id) on delete cascade, primary key(coupon_id,product_id));
+create table if not exists coupon_usages (id uuid primary key default gen_random_uuid(), coupon_id uuid references coupons_ext(id), user_id uuid references auth.users(id), order_id uuid references orders(id), used_at timestamptz default now());
+
+-- 9) نظام النقاط والولاء
+create table if not exists loyalty_points (
+  user_id uuid primary key references auth.users(id) on delete cascade,
+  balance int not null default 0,
+  total_earned int not null default 0,
+  total_used int not null default 0,
+  updated_at timestamptz default now()
+);
+create table if not exists points_transactions (
+  id uuid primary key default gen_random_uuid(),
+  user_id uuid not null references auth.users(id) on delete cascade,
+  type text not null check (type in ('earn','use','expire')),
+  amount int not null,
+  reason text, -- التسجيل، شراء، إحالة...
+  order_id uuid references orders(id),
+  created_at timestamptz default now()
+);
+create index if not exists idx_points_user on points_transactions(user_id);
+
+-- 18) نظام الإحالة
+create table if not exists referral_codes (
+  user_id uuid primary key references auth.users(id) on delete cascade,
+  code text unique not null,
+  uses int not null default 0,
+  created_at timestamptz default now()
+);
+create table if not exists referrals (
+  id uuid primary key default gen_random_uuid(),
+  referrer_id uuid not null references auth.users(id),
+  referred_id uuid not null references auth.users(id),
+  reward_points int,
+  created_at timestamptz default now()
+);
+
+-- 19) المفضلة ومقارنة (المفضلة موجودة، نضيف المقارنة)
+create table if not exists product_comparisons (
+  id uuid primary key default gen_random_uuid(),
+  user_id uuid not null references auth.users(id) on delete cascade,
+  product_ids uuid[] not null,
+  created_at timestamptz default now()
+);
+
+-- RLS
+alter table installment_plans_config enable row level security;
+alter table coupons_ext enable row level security;
+alter table coupon_usages enable row level security;
+alter table loyalty_points enable row level security;
+alter table points_transactions enable row level security;
+alter table referral_codes enable row level security;
+alter table referrals enable row level security;
+alter table product_comparisons enable row level security;
+
+do $$ begin
+  if not exists (select 1 from pg_policies where policyname='public_plans' and tablename='installment_plans_config') then
+    create policy public_plans on installment_plans_config for select using (true);
+  end if;
+  if not exists (select 1 from pg_policies where policyname='admin_plans' and tablename='installment_plans_config') then
+    create policy admin_plans on installment_plans_config for all using (is_admin()) with check (is_admin());
+  end if;
+  if not exists (select 1 from pg_policies where policyname='public_coupons' and tablename='coupons_ext') then
+    create policy public_coupons on coupons_ext for select using (is_active and (end_at is null or end_at > now()));
+  end if;
+  if not exists (select 1 from pg_policies where policyname='own_points' and tablename='loyalty_points') then
+    create policy own_points on loyalty_points for all using (user_id = auth.uid()) with check (user_id = auth.uid());
+  end if;
+end $$;
