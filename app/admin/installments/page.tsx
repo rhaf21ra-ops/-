@@ -17,12 +17,13 @@ import { toast } from "sonner";
 import { useState } from "react";
 
 export default function AdminInstallmentsPage() {
-  const { installmentApplications, reviewInstallmentApplication, addAuditLog, currentUser } = useApp();
+  const { installmentApplications, reviewInstallmentApplication, addAuditLog, currentUser, isReal } = useApp();
   const [reviewId, setReviewId] = useState<string | null>(null);
   const [rejectionReason, setRejectionReason] = useState("");
 
-  const handleApprove = (id: string) => {
-    reviewInstallmentApplication(id, true);
+  const handleApprove = async (id: string) => {
+    const ok = await Promise.resolve(reviewInstallmentApplication(id, true));
+    if (ok === false) return;
     addAuditLog({
       actor: currentUser?.name || "مدير",
       actorRole: "admin",
@@ -31,12 +32,14 @@ export default function AdminInstallmentsPage() {
       entityId: id,
       details: `الموافقة على طلب تقسيط`,
     });
-    toast.success("تم قبول طلب التقسيط بنجاح");
+    if (!isReal) toast.success("تم قبول طلب التقسيط بنجاح");
     setReviewId(null);
   };
 
-  const handleReject = (id: string) => {
-    reviewInstallmentApplication(id, false, rejectionReason);
+  const handleReject = async (id: string) => {
+    if (isReal && rejectionReason.trim().length < 3) { toast.error("اكتب سبب الرفض"); return; }
+    const ok = await Promise.resolve(reviewInstallmentApplication(id, false, rejectionReason));
+    if (ok === false) return;
     addAuditLog({
       actor: currentUser?.name || "مدير",
       actorRole: "admin",
@@ -45,7 +48,7 @@ export default function AdminInstallmentsPage() {
       entityId: id,
       details: `رفض طلب تقسيط${rejectionReason ? ` - ${rejectionReason}` : ""}`,
     });
-    toast.error("تم رفض طلب التقسيط");
+    if (!isReal) toast.error("تم رفض طلب التقسيط");
     setReviewId(null);
     setRejectionReason("");
   };
@@ -83,10 +86,10 @@ export default function AdminInstallmentsPage() {
                     <TableCell className="text-sm">{app.companyName}</TableCell>
                     <TableCell className="text-sm line-clamp-1 max-w-28">{app.productName}</TableCell>
                     <TableCell className="text-sm">{app.merchantName}</TableCell>
-                    <TableCell className="text-sm">{formatCurrency(app.cashPrice)}</TableCell>
-                    <TableCell className="text-sm">{formatCurrency(app.deferredPrice)}</TableCell>
+                    <TableCell className="text-sm">{formatCurrency(app.cashPrice, app.currency)}</TableCell>
+                    <TableCell className="text-sm">{formatCurrency(app.deferredPrice, app.currency)}</TableCell>
                     <TableCell className="text-sm">{app.durationMonths} شهر</TableCell>
-                    <TableCell className="text-sm">{formatCurrency(app.monthlyInstallment)}</TableCell>
+                    <TableCell className="text-sm">{formatCurrency(app.monthlyInstallment, app.currency)}</TableCell>
                     <TableCell><StatusBadge status={app.status} /></TableCell>
                     <TableCell>
                       {(app.status === "جديد" || app.status === "قيد المراجعة") ? (
@@ -104,10 +107,10 @@ export default function AdminInstallmentsPage() {
                                 <div><span className="text-muted-foreground">الشركة:</span> {app.companyName}</div>
                                 <div><span className="text-muted-foreground">المنتج:</span> {app.productName}</div>
                                 <div><span className="text-muted-foreground">التاجر:</span> {app.merchantName}</div>
-                                <div><span className="text-muted-foreground">السعر النقدي:</span> {formatCurrency(app.cashPrice)}</div>
-                                <div><span className="text-muted-foreground">السعر المؤجل:</span> {formatCurrency(app.deferredPrice)}</div>
+                                <div><span className="text-muted-foreground">السعر النقدي:</span> {formatCurrency(app.cashPrice, app.currency)}</div>
+                                <div><span className="text-muted-foreground">السعر المؤجل:</span> {formatCurrency(app.deferredPrice, app.currency)}</div>
                                 <div><span className="text-muted-foreground">المدة:</span> {app.durationMonths} شهر</div>
-                                <div><span className="text-muted-foreground">القسط الشهري:</span> {formatCurrency(app.monthlyInstallment)}</div>
+                                <div><span className="text-muted-foreground">القسط الشهري:</span> {formatCurrency(app.monthlyInstallment, app.currency)}</div>
                               </div>
                               <div>
                                 <Label className="mb-1.5 block">سبب الرفض (اختياري)</Label>

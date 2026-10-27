@@ -30,7 +30,7 @@ export default function TermsPage() {
             </section>
             <section>
               <h2 className="font-bold text-foreground text-lg mb-2">5. التقسيط</h2>
-              <p>برنامج التقسيط المعروض هو نموذج تجريبي توضيحي فقط. خدمات التقسيط والدفع الفعلية تخضع مستقبلاً للجهات المرخصة والعقود والتنظيمات المعمول بها في الجمهورية اليمنية. لا تعتبر الأرقام المعروضة عرضاً مالياً ملزماً.</p>
+              <p>يُعرض السعر المؤجل وعدد الأقساط وقيمتها قبل تأكيد الطلب، ويُعتمد الطلب بعد المراجعة، وتخضع الخدمة للعقود والأنظمة المعمول بها في الجمهورية اليمنية.</p>
             </section>
             <section>
               <h2 className="font-bold text-foreground text-lg mb-2">6. المسؤولية</h2>
@@ -44,7 +44,7 @@ export default function TermsPage() {
               <h2 className="font-bold text-foreground text-lg mb-2">8. تعديل الشروط</h2>
               <p>يحق للإدارة تعديل هذه الشروط في أي وقت. استمرارك في استخدام المنصة بعد التعديل يعني موافقتك على الشروط المعدلة.</p>
             </section>
-            <p className="text-xs text-muted-foreground pt-4 border-t">آخر تحديث: سبتمبر 2026 - هذه شروط تجريبية لنسخة Demo</p>
+            <p className="text-xs text-muted-foreground pt-4 border-t">آخر تحديث: سبتمبر 2026</p>
           </CardContent>
         </Card>
       </div>

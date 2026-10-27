@@ -25,6 +25,7 @@ export interface AuthUser {
   status: string;
   identityStatus: string;
   identityNote?: string;
+  businessName?: string;
   avatarUrl?: string;
   demo: boolean;
 }
@@ -34,7 +35,7 @@ interface AuthContextType {
   session: Session | null;
   loading: boolean;
   demoMode: boolean;
-  signUp: (email: string, password: string, fullName: string, phone: string, role: UserRole) => Promise<{ error: string | null; userId: string | null }>;
+  signUp: (email: string, password: string, fullName: string, phone: string, role: UserRole, extra?: { businessName?: string; city?: string }) => Promise<{ error: string | null; userId: string | null }>;
   signIn: (email: string, password: string) => Promise<{ error: string | null }>;
   signOut: () => Promise<void>;
   refreshUser: () => Promise<void>;
@@ -66,7 +67,7 @@ function fromDemo(a: DemoAccount): AuthUser {
   return {
     id: a.id, email: a.email, fullName: a.fullName, phone: a.phone,
     role: mainRole(a.roles), roles: a.roles, permissions: permissionsOf(a),
-    status: a.status, identityStatus: a.identityStatus, identityNote: a.identityNote, demo: true,
+    status: a.status, identityStatus: a.identityStatus, identityNote: a.identityNote, businessName: a.businessName, demo: true,
   };
 }
 
@@ -179,7 +180,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
   }, [session, loadUserProfile, loadDemo]);
 
   const signUp = useCallback(async (
-    email: string, password: string, fullName: string, phone: string, role: UserRole,
+    email: string, password: string, fullName: string, phone: string, role: UserRole, extra?: { businessName?: string; city?: string },
   ): Promise<{ error: string | null; userId: string | null }> => {
     if (!REGISTERABLE.includes(role)) return { error: "نوع الحساب غير مسموح", userId: null };
     if (password.length < 6) return { error: "كلمة المرور 6 أحرف على الأقل", userId: null };
@@ -187,13 +188,13 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     if (!isSupabaseConfigured) {
       if (demoAccounts.byEmail(email)) return { error: "هذا البريد مسجّل مسبقاً", userId: null };
       if (demoAccounts.all().some((a) => a.phone && a.phone === phone.trim())) return { error: "رقم الهاتف مستخدم من حساب آخر", userId: null };
-      const acc = demoAccounts.add({ email: email.trim(), password, fullName, phone: phone.trim(), roles: [role], status: "pending", identityStatus: "none" });
+      const acc = demoAccounts.add({ email: email.trim(), password, fullName, phone: phone.trim(), roles: [role], status: "pending", identityStatus: "none", businessName: extra?.businessName });
       demoSession.set(acc.id);
       return { error: null, userId: acc.id };
     }
 
     const { data, error } = await supabase.auth.signUp({
-      email, password, options: { data: { full_name: fullName, phone, role } },
+      email, password, options: { data: { full_name: fullName, phone, role, business_name: extra?.businessName ?? null, city: extra?.city ?? null } },
     });
     if (error) {
       const m = error.message.toLowerCase();

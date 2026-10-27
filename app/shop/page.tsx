@@ -8,6 +8,7 @@ import { ProductCard } from "@/components/product-card";
 import { EmptyState } from "@/components/empty-state";
 import { Input } from "@/components/ui/input";
 import { Button } from "@/components/ui/button";
+import Link from "next/link";
 import { Card, CardContent } from "@/components/ui/card";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { useApp } from "@/lib/store";
@@ -195,6 +196,14 @@ function ShopContent() {
                 ))}
               </div>
             )}
+
+            <div className="mt-8 flex flex-col items-start justify-between gap-3 rounded-xl border border-primary/30 bg-primary/5 p-5 sm:flex-row sm:items-center">
+              <div>
+                <p className="font-bold">لم تجد المنتج الذي تريده؟</p>
+                <p className="text-sm text-muted-foreground">أرسل رابط المنتج أو صورته من أي متجر محلي، ونتواصل مع المتجر ونوفره لك بالتقسيط.</p>
+              </div>
+              <Link href="/request-product" className="shrink-0"><Button>طلب منتج غير مدرج</Button></Link>
+            </div>
           </div>
         </div>
 

@@ -45,7 +45,6 @@ export default function StaffAdminPage() {
   return (
     <DashboardLayout navItems={adminNavItems} title="الحسابات والصلاحيات" role="admin">
       <div className="mx-auto max-w-5xl space-y-4">
-        {demoMode && <p className="rounded-lg bg-amber-50 p-3 text-sm text-amber-800">وضع تجريبي: الحسابات محفوظة في هذا المتصفح فقط. لحسابات حقيقية اربط Supabase (انظر README).</p>}
         <div className="flex gap-2">
           {(["accounts", "roles"] as const).map((t) => (
             <button key={t} type="button" onClick={() => setTab(t)}

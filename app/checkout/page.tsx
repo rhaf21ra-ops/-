@@ -1,6 +1,8 @@
 "use client";
 
 import { useRouter } from "next/navigation";
+import { CurrencySwitch } from "@/components/CurrencySwitch";
+import { roundMoney } from "@/lib/currency";
 import { Header } from "@/components/layout/header";
 import { Footer } from "@/components/layout/footer";
 import { BottomNav } from "@/components/layout/bottom-nav";
@@ -22,11 +24,12 @@ import type { FinancingDetails } from "@/lib/types";
 import { CreditCard, Wallet, Truck, CheckCircle2, MapPin } from "lucide-react";
 import { useState, useEffect } from "react";
 import { toast } from "sonner";
+import { LocationPicker, type LocationValue } from "@/components/LocationPicker";
 
 export default function CheckoutPage() {
   const {
-    cart, cartTotal, clearCart, createOrder, createInstallmentApplication, createInstallmentRequest,
-    currentUser, employees, companies, addAuditLog,
+    cart, clearCart, createOrder, createInstallmentApplication, createInstallmentRequest,
+    currentUser, employees, companies, addAuditLog, isReal, placeOrder, toPay, payCurrency, markup,
   } = useApp();
   const router = useRouter();
 
@@ -45,17 +48,27 @@ export default function CheckoutPage() {
   const [region, setRegion] = useState("");
   const [branchId, setBranchId] = useState("");
   const [guarantee, setGuarantee] = useState<GuaranteeValue>(emptyGuarantee);
+  const [orderLocation, setOrderLocation] = useState<LocationValue | null>(null);
+  const [savedAddresses, setSavedAddresses] = useState<any[]>([]);
   const [submitting, setSubmitting] = useState(false);
 
-  const deliveryFee = 5000;
-  const grandTotal = cartTotal + deliveryFee;
+  useEffect(()=>{ (async()=>{
+    try{ const { supabase } = await import("@/lib/supabase-client"); const { data } = await supabase.from('user_addresses').select('*'); if(data) setSavedAddresses(data); }catch{}
+  })(); },[currentUser?.id]);
+
+  // Real mode: the server total has no delivery fee yet, so none is shown (never display a price that is not charged).
+  const deliveryFee = isReal ? 0 : toPay(5000, "YER");
 
   const employee = employees.find(emp => emp.userId === currentUser?.id);
   const company = employee ? companies.find(c => c.id === employee.companyId) : null;
   const guaranteeTypes = guaranteeOptionsFor(!!employee, company);
 
-  const deferredTotal = cart.reduce((sum, item) => sum + item.deferredPrice * item.quantity, 0);
-  const monthlyInstallment = Math.round(deferredTotal / duration);
+  // Every unit price is converted and rounded in the pay currency first (same rule as the server), then the markup is applied to the total.
+  const cashTotal = cart.reduce((sum, item) => sum + toPay(item.cashPrice, item.currency) * item.quantity, 0);
+  const deferredTotal = roundMoney(cashTotal * (1 + markup / 100), payCurrency);
+  const monthlyInstallment = roundMoney(deferredTotal / duration, payCurrency);
+  const orderSubtotal = paymentType === "تقسيط" ? deferredTotal : cashTotal;
+  const grandTotal = orderSubtotal + deliveryFee;
 
   /** Returns the validated financing block, or null after showing the error. */
   const buildFinancing = (): FinancingDetails | null => {
@@ -93,7 +106,7 @@ export default function CheckoutPage() {
     };
   };
 
-  const handleSubmit = (e: React.FormEvent) => {
+  const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
     if (!formData.name || !formData.phone || !formData.governorate || !formData.city || !formData.address) {
       toast.error("البيانات غير مكتملة", { description: "يرجى تعبئة جميع الحقول المطلوبة" });
@@ -102,6 +115,50 @@ export default function CheckoutPage() {
 
     const financing = paymentType === "تقسيط" ? buildFinancing() : null;
     if (paymentType === "تقسيط" && !financing) return;
+
+    if (isReal) {
+      if (!currentUser) {
+        toast.error("سجّل الدخول أولاً لإتمام الطلب");
+        router.push("/login?redirect=/checkout");
+        return;
+      }
+      setSubmitting(true);
+      const r = await placeOrder({
+        items: cart.map(i => ({ productId: i.productId, quantity: i.quantity })),
+        payment: paymentType,
+        recipient: formData.name,
+        phone: formData.phone,
+        governorate: formData.governorate,
+        city: formData.city,
+        address: formData.area ? `${formData.area} - ${formData.address}` : formData.address,
+        notes: formData.notes,
+        months: duration,
+        guaranteeTypeId: guarantee.guaranteeTypeId,
+        guaranteeDetails: guarantee.details,
+        guarantorName: guarantee.guarantorName,
+        guarantorPhone: guarantee.guarantorPhone,
+        guarantorIdNumber: guarantee.guarantorIdNumber,
+        branchId: financing?.branchId,
+        currency: payCurrency,
+      });
+      setSubmitting(false);
+      if (!r.ok) {
+        toast.error("تعذّر إنشاء الطلب", { description: r.error });
+        return;
+      }
+      toast.success(paymentType === "تقسيط" ? "تم إرسال طلب التقسيط" : "تم إنشاء الطلب", {
+        description: paymentType === "تقسيط" ? "سيراجعه الطرف المختص ثم تُعلَم بالنتيجة" : "سنوافيك بحالة التوصيل",
+      });
+      // حفظ موقع الطلب + إرسال لبريد الفرع (لا يؤثر على نجاح الطلب)
+      const realOrderId = (r as any)?.data?.id || (r as any)?.data?.order_id || (r as any)?.data;
+      if (realOrderId) {
+        if (orderLocation) fetch('/api/orders/location',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({orderId: realOrderId, location: orderLocation})}).catch(()=>{});
+        if (financing?.branchId) fetch('/api/branch-email/send',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({orderId: realOrderId})}).catch(()=>{});
+      }
+      clearCart();
+      router.push(currentUser.role === "employee" ? "/employee/orders" : "/customer");
+      return;
+    }
 
     setSubmitting(true);
 
@@ -112,9 +169,9 @@ export default function CheckoutPage() {
       merchantId: item.merchantId,
       merchantName: item.merchantName,
       quantity: item.quantity,
-      cashPrice: item.cashPrice,
-      deferredPrice: item.deferredPrice,
-      paymentType: item.paymentType,
+      cashPrice: toPay(item.cashPrice, item.currency),
+      deferredPrice: toPay(item.deferredPrice, item.currency),
+      paymentType,
     }));
 
     const merchantIds = [...new Set(items.map(i => i.merchantId))];
@@ -124,6 +181,8 @@ export default function CheckoutPage() {
       customerId: employee?.id || currentUser?.id || "",
       items,
       total: grandTotal,
+      currency: payCurrency,
+      months: paymentType === "تقسيط" ? duration : undefined,
       paymentType,
       status: paymentType === "تقسيط" ? "قيد المراجعة" : "جديد",
       city: formData.city,
@@ -137,7 +196,6 @@ export default function CheckoutPage() {
 
     if (paymentType === "تقسيط" && financing && cart.length > 0) {
       const firstItem = cart[0];
-      const cashTotal = cart.reduce((s, i) => s + i.cashPrice * i.quantity, 0);
       const productName = cart.length > 1 ? `${firstItem.productName} و${cart.length - 1} منتجات أخرى` : firstItem.productName;
 
       // Employees with a normal guarantee follow the employee application path (unchanged).
@@ -152,6 +210,7 @@ export default function CheckoutPage() {
           productName,
           merchantId: firstItem.merchantId,
           merchantName: firstItem.merchantName,
+          currency: payCurrency,
           cashPrice: cashTotal,
           deferredPrice: deferredTotal,
           durationMonths: duration,
@@ -168,6 +227,7 @@ export default function CheckoutPage() {
           productImage: firstItem.productImage,
           merchantId: firstItem.merchantId,
           merchantName: firstItem.merchantName,
+          currency: payCurrency,
           cashPrice: cashTotal,
           deferredPrice: deferredTotal,
           durationMonths: duration,
@@ -201,6 +261,11 @@ export default function CheckoutPage() {
         entityId: order.id,
         details: `إنشاء طلب ${paymentType} رقم ${order.orderNumber}`,
       });
+    }
+
+    // حفظ موقع الطلب (تجريبي: يحفظ محلياً، حقيقي: سيرسل للخادم عند تفعيل isReal)
+    if (orderLocation && (order as any)?.id) {
+      try { localStorage.setItem(`order-loc-${(order as any).id}`, JSON.stringify(orderLocation)); } catch {}
     }
 
     clearCart();
@@ -278,6 +343,9 @@ export default function CheckoutPage() {
               </CardContent>
             </Card>
 
+            {/* موقع الطلب - نظام المواقع الجديد */}
+            <LocationPicker value={orderLocation} onChange={setOrderLocation} savedAddresses={savedAddresses} onSaveAddress={async(addr)=>{ try{ const {supabase}=await import("@/lib/supabase-client"); const {data}=await supabase.from('user_addresses').insert({...addr,user_id: currentUser?.id}).select(); if(data) setSavedAddresses([...savedAddresses, data[0]]); }catch{} }} />
+
             {/* Payment method */}
             <Card>
               <CardContent className="p-5">
@@ -339,11 +407,11 @@ export default function CheckoutPage() {
                       <div className="grid grid-cols-2 gap-3 text-sm">
                         <div>
                           <span className="text-muted-foreground">القسط الشهري:</span>
-                          <span className="font-bold text-primary mr-2">{formatCurrency(monthlyInstallment)}</span>
+                          <span className="font-bold text-primary mr-2">{formatCurrency(monthlyInstallment, payCurrency)}</span>
                         </div>
                         <div>
                           <span className="text-muted-foreground">إجمالي المبلغ المؤجل:</span>
-                          <span className="font-bold mr-2">{formatCurrency(deferredTotal)}</span>
+                          <span className="font-bold mr-2">{formatCurrency(deferredTotal, payCurrency)}</span>
                         </div>
                       </div>
                     </div>
@@ -382,6 +450,7 @@ export default function CheckoutPage() {
             <Card className="sticky top-20">
               <CardContent className="p-5 space-y-4">
                 <h2 className="font-bold text-lg">ملخص الطلب</h2>
+                <CurrencySwitch />
                 <Separator />
                 <div className="space-y-2 max-h-48 overflow-y-auto">
                   {cart.map(item => (
@@ -392,7 +461,7 @@ export default function CheckoutPage() {
                         <p className="text-xs text-muted-foreground">{item.quantity}x · {item.paymentType}</p>
                       </div>
                       <span className="text-xs font-medium">
-                        {formatCurrency((item.paymentType === "تقسيط" ? item.deferredPrice : item.cashPrice) * item.quantity)}
+                        {formatCurrency(toPay(paymentType === "تقسيط" ? item.deferredPrice : item.cashPrice, item.currency) * item.quantity, payCurrency)}
                       </span>
                     </div>
                   ))}
@@ -401,17 +470,17 @@ export default function CheckoutPage() {
                 <div className="space-y-2 text-sm">
                   <div className="flex justify-between">
                     <span className="text-muted-foreground">إجمالي المنتجات</span>
-                    <span>{formatCurrency(cartTotal)}</span>
+                    <span>{formatCurrency(orderSubtotal, payCurrency)}</span>
                   </div>
                   <div className="flex justify-between">
                     <span className="text-muted-foreground">رسوم التوصيل</span>
-                    <span>{formatCurrency(deliveryFee)}</span>
+                    <span>{formatCurrency(deliveryFee, payCurrency)}</span>
                   </div>
                 </div>
                 <Separator />
                 <div className="flex justify-between text-base">
                   <span className="font-bold">الإجمالي</span>
-                  <span className="font-bold text-primary">{formatCurrency(grandTotal)}</span>
+                  <span className="font-bold text-primary">{formatCurrency(grandTotal, payCurrency)}</span>
                 </div>
                 <Button type="submit" className="w-full" size="lg" disabled={submitting}>
                   {submitting ? (

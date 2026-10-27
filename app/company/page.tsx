@@ -23,7 +23,7 @@ const navItems: { href: string; label: string; icon: LucideIcon }[] = [
 ];
 
 export default function CompanyDashboard() {
-  const { currentUser, companies, employees, installmentApplications, installmentContracts, installmentRequests, companyApproveFinancing, companyRejectFinancing } = useApp();
+  const { currentUser, companies, employees, installmentApplications, installmentContracts, installmentRequests, companyApproveFinancing, companyRejectFinancing, isReal, toYER } = useApp();
   const company = companies.find(c => c.userId === currentUser?.id);
   const myEmployees = employees.filter(e => e.companyId === company?.id);
   const activeEmployees = myEmployees.filter(e => e.status === "نشط");
@@ -32,7 +32,7 @@ export default function CompanyDashboard() {
   const myApps = installmentApplications.filter(a => myEmployeeIds.includes(a.employeeId));
   const myContracts = installmentContracts.filter(c => myEmployeeIds.includes(c.employeeId));
   const activeContracts = myContracts.filter(c => c.status === "نشط");
-  const totalOperations = myContracts.reduce((s, c) => s + c.totalAmount, 0);
+  const totalOperations = myContracts.reduce((s, c) => s + toYER(c.totalAmount, c.currency), 0);
 
   // Financing requests from my employees that need company approval
   const pendingFinancingRequests = installmentRequests.filter(
@@ -134,17 +134,17 @@ export default function CompanyDashboard() {
                             <TableCell className="text-xs font-medium">{r.requestNumber}</TableCell>
                             <TableCell className="text-sm">{emp?.name || r.userName}</TableCell>
                             <TableCell className="text-xs line-clamp-1 max-w-32">{r.productName}</TableCell>
-                            <TableCell className="text-xs font-medium">{formatCurrency(r.deferredPrice)}</TableCell>
-                            <TableCell className="text-xs">{formatCurrency(r.monthlyInstallment)}</TableCell>
+                            <TableCell className="text-xs font-medium">{formatCurrency(r.deferredPrice, r.currency)}</TableCell>
+                            <TableCell className="text-xs">{formatCurrency(r.monthlyInstallment, r.currency)}</TableCell>
                             <TableCell className="text-xs">{r.durationMonths} شهراً</TableCell>
                             <TableCell><StatusBadge status={r.status} /></TableCell>
                             <TableCell>
                               <div className="flex items-center gap-1">
-                                <Button size="sm" variant="outline" className="gap-1 text-green-600" onClick={() => { companyApproveFinancing(r.id, "موافقة"); toast.success("تمت الموافقة على طلب التمويل"); }}>
+                                <Button size="sm" variant="outline" className="gap-1 text-green-600" onClick={async () => { const ok = await Promise.resolve(companyApproveFinancing(r.id, "موافقة")); if (ok !== false && !isReal) toast.success("تمت الموافقة على طلب التمويل"); }}>
                                   <CheckCircle2 className="h-3.5 w-3.5" />
                                   موافقة
                                 </Button>
-                                <Button size="sm" variant="outline" className="gap-1 text-red-600" onClick={() => { companyRejectFinancing(r.id, "لا يوافق"); toast.success("تم رفض طلب التمويل"); }}>
+                                <Button size="sm" variant="outline" className="gap-1 text-red-600" onClick={async () => { const ok = await Promise.resolve(companyRejectFinancing(r.id, "لا يوافق")); if (ok !== false && !isReal) toast.success("تم رفض طلب التمويل"); }}>
                                   <XCircle className="h-3.5 w-3.5" />
                                   رفض
                                 </Button>

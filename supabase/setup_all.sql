@@ -1,5 +1,5 @@
 -- قسطها: إعداد قاعدة البيانات كاملاً بملف واحد. الصقه في Supabase > SQL Editor ونفّذه مرة واحدة على مشروع جديد فارغ.
--- يضم الترحيلات 0001..0013 بالترتيب. لا تنفذه مرتين على نفس القاعدة.
+-- يضم الترحيلات 0001..0018 بالترتيب (بدون ملفات البيانات التجريبية). لا تنفذه مرتين على نفس القاعدة.
 
 -- ═══════════ 0001_core_schema.sql ═══════════
 -- Qistuha: core schema (Phase 1). UNTESTED: apply to a Supabase project and verify.
@@ -2288,3 +2288,901 @@ create policy merchant_orders on orders for select using (_merchant_has_order(id
 create policy staff_commissions_fin on commissions for select using (has_permission('financing.view'));
 create policy own_company_employees_profiles on user_profiles for select using (exists (
   select 1 from employees e join companies c on c.id = e.company_id where e.user_id = user_profiles.id and c.owner_id = auth.uid()));
+
+-- ═════════ 11. Application snapshot (so a company can see WHAT its employee orders without reading the order) ═════════
+alter table financing_applications add column if not exists product_summary text;
+alter table financing_applications add column if not exists merchant_summary text;
+alter table financing_applications add column if not exists applicant_name text;
+alter table financing_applications add column if not exists company_name text;
+
+create or replace function fill_application_summary() returns trigger
+language plpgsql security definer set search_path = public as $$
+declare names text; mers text; n int;
+begin
+  if new.order_id is not null then
+    select string_agg(p.name, '، ' order by p.name), string_agg(distinct coalesce(m.store_name, m.business_name), '، '), count(*)
+      into names, mers, n
+      from order_items i join products p on p.id = i.product_id left join merchants m on m.id = i.merchant_id
+     where i.order_id = new.order_id;
+    new.product_summary := names;
+    new.merchant_summary := mers;
+  end if;
+  select full_name into new.applicant_name from user_profiles where id = coalesce(new.applicant_user_id, (select user_id from employees where id = new.employee_id));
+  if new.company_id is not null then select name into new.company_name from companies where id = new.company_id; end if;
+  return new;
+end $$;
+drop trigger if exists trg_fill_application_summary on financing_applications;
+-- fires after financing_before_insert (alphabetical order) so applicant_user_id is already set
+create trigger trg_zz_fill_application_summary before insert on financing_applications
+  for each row execute function fill_application_summary();
+
+-- ═════════ 12. Products of a pending / suspended merchant are not public ═════════
+create or replace function _store_is_public(p_store uuid) returns boolean
+language sql stable security definer set search_path = public as $$
+  select exists (select 1 from stores s join merchants m on m.id = s.merchant_id where s.id = p_store and m.status = 'active');
+$$;
+drop policy if exists public_read on products;
+create policy public_read on products for select using (active and _store_is_public(store_id));
+
+
+-- ═══════════ 0014 (20261014025316_0014_exempt_company_identity.sql.sql) ═══════════
+/*
+# Exempt company accounts from identity verification
+
+## Problem
+The `require_active_account` trigger checks `p.identity_status <> 'verified'` for ALL
+account types, including companies. Company accounts should not need identity
+verification — they are legal entities, not individual shoppers.
+
+## Changes
+1. Replaces the `require_active_account` function to skip the identity check for
+   users whose only role is `company`.
+2. A user who has both `company` and another role (e.g. `customer`) still needs
+   identity verification for orders placed as a customer.
+
+## Security
+- No new tables or columns.
+- No RLS policy changes.
+- The trigger still enforces `status = 'active'` for all users.
+*/
+
+CREATE OR REPLACE FUNCTION require_active_account()
+RETURNS trigger
+LANGUAGE plpgsql
+SECURITY DEFINER
+SET search_path = public
+AS $$
+declare
+  uid uuid;
+  p user_profiles;
+  is_company_only boolean;
+begin
+  if auth.uid() is null then return new; end if;  -- back office / service role
+  if tg_table_name = 'orders' then uid := new.user_id; else uid := new.applicant_user_id; end if;
+  if uid is null then return new; end if;
+  select * into p from user_profiles where id = uid;
+  if not found or p.status <> 'active' then
+    raise exception 'account is not active';
+  end if;
+  -- Company accounts are exempt from identity verification
+  select not exists (
+    select 1 from user_roles ur
+    join roles r on r.id = ur.role_id
+    where ur.user_id = uid and r.name <> 'company'
+  ) and exists (
+    select 1 from user_roles ur
+    join roles r on r.id = ur.role_id
+    where ur.user_id = uid and r.name = 'company'
+  ) into is_company_only;
+  if is_company_only then
+    return new;
+  end if;
+  if p.identity_status <> 'verified' then
+    raise exception 'account is not active: identity verification must be approved first';
+  end if;
+  return new;
+end;
+$$;
+
+
+-- ═══════════ 0015 (20261014025330_0015_autoactivate_company.sql.sql) ═══════════
+/*
+# Auto-activate company accounts at registration
+
+## Problem
+Company accounts are created with status='pending' and identity_status='none'.
+Since companies are now exempt from identity verification, they should start
+with status='active' and identity_status='verified' so they can operate immediately.
+
+## Changes
+1. Replaces the `handle_new_user` trigger function to set company accounts to
+   active+verified at creation time.
+2. Also auto-activates merchant accounts (they already need admin approval for
+   the merchant record, but the user profile should be active so they can log in
+   and manage their store settings).
+
+## Security
+- No schema changes.
+- Company accounts still need admin approval for merchant-level operations
+  through the merchants table status field.
+*/
+CREATE OR REPLACE FUNCTION handle_new_user()
+RETURNS trigger
+LANGUAGE plpgsql
+SECURITY DEFINER
+SET search_path = public
+AS $$
+declare
+  requested text := coalesce(new.raw_user_meta_data->>'role','customer');
+  nm text := coalesce(nullif(trim(new.raw_user_meta_data->>'full_name'),''), 'حساب جديد');
+  biz text := nullif(trim(new.raw_user_meta_data->>'business_name'),'');
+  mid uuid;
+begin
+  if requested not in ('customer','employee','merchant','company') then requested := 'customer'; end if;
+  -- Company accounts skip identity verification; merchant accounts are activated but their store needs approval
+  if requested = 'company' then
+    insert into user_profiles(id, full_name, phone, email, status, identity_status)
+    values (new.id, nm, nullif(trim(new.raw_user_meta_data->>'phone'),''), new.email, 'active', 'verified');
+  else
+    insert into user_profiles(id, full_name, phone, email)
+    values (new.id, nm, nullif(trim(new.raw_user_meta_data->>'phone'),''), new.email);
+  end if;
+  insert into user_roles(user_id, role_id) select new.id, id from roles where name = requested;
+  if requested = 'merchant' then
+    insert into merchants(owner_id, business_name, store_name, owner_name)
+    values (new.id, coalesce(biz, 'متجر ' || nm), coalesce(biz, 'متجر ' || nm), nm) returning id into mid;
+    insert into stores(merchant_id, name, city) values (mid, coalesce(biz, 'متجر ' || nm), new.raw_user_meta_data->>'city');
+  elsif requested = 'company' then
+    insert into companies(owner_id, name, contact_name, phone, city)
+    values (new.id, coalesce(biz, 'شركة ' || nm), nm, nullif(trim(new.raw_user_meta_data->>'phone'),''), new.raw_user_meta_data->>'city');
+  end if;
+  return new;
+end;
+$$;
+
+
+-- ═══════════ 0016 (20261014031200_0016_support_tickets_enhanced.sql.sql) ═══════════
+/*
+# Support tickets: add columns, replies table, RLS, and admin permission
+
+## Changes
+
+1. Adds columns to support_tickets:
+   - ticket_number: unique human-readable ticket number
+   - category: problem type (login, identity, account, company, employees, password, other)
+   - phone: optional phone number
+   - email: optional email
+   - full_name: sender name
+   - assigned_to: staff member assigned
+   - updated_at: last activity timestamp
+
+2. Creates support_ticket_replies table for staff-user conversation thread.
+
+3. Enables RLS on both tables with proper policies:
+   - Users can CRUD their own tickets
+   - Users can read replies on their own tickets
+   - Staff with support.manage can read/update all tickets
+   - Staff with support.manage can insert replies
+
+4. Grants support.manage permission to admin role in DB.
+
+5. Creates indexes for performance.
+*/
+
+-- Add columns to support_tickets
+ALTER TABLE support_tickets
+  ADD COLUMN IF NOT EXISTS ticket_number text UNIQUE DEFAULT ('TKT-' || upper(substr(encode(gen_random_bytes(6), 'hex'), 1, 8))),
+  ADD COLUMN IF NOT EXISTS category text DEFAULT 'other',
+  ADD COLUMN IF NOT EXISTS phone text,
+  ADD COLUMN IF NOT EXISTS email text,
+  ADD COLUMN IF NOT EXISTS full_name text,
+  ADD COLUMN IF NOT EXISTS assigned_to uuid,
+  ADD COLUMN IF NOT EXISTS updated_at timestamptz DEFAULT now();
+
+-- Fix any existing rows that have null ticket_number
+UPDATE support_tickets SET ticket_number = 'TKT-' || upper(substr(encode(gen_random_bytes(6), 'hex'), 1, 8)) WHERE ticket_number IS NULL;
+
+-- Ticket replies table
+CREATE TABLE IF NOT EXISTS support_ticket_replies (
+  id uuid PRIMARY KEY DEFAULT gen_random_uuid(),
+  ticket_id uuid NOT NULL REFERENCES support_tickets(id) ON DELETE CASCADE,
+  user_id uuid NOT NULL DEFAULT auth.uid(),
+  message text NOT NULL,
+  is_staff boolean NOT NULL DEFAULT false,
+  created_at timestamptz NOT NULL DEFAULT now()
+);
+
+CREATE INDEX IF NOT EXISTS idx_support_replies_ticket ON support_ticket_replies(ticket_id, created_at);
+CREATE INDEX IF NOT EXISTS idx_support_tickets_user ON support_tickets(user_id);
+CREATE INDEX IF NOT EXISTS idx_support_tickets_status ON support_tickets(status);
+
+-- Enable RLS
+ALTER TABLE support_tickets ENABLE ROW LEVEL SECURITY;
+ALTER TABLE support_ticket_replies ENABLE ROW LEVEL SECURITY;
+
+-- Drop existing policies if any
+DROP POLICY IF EXISTS "select_own_tickets" ON support_tickets;
+DROP POLICY IF EXISTS "insert_own_tickets" ON support_tickets;
+DROP POLICY IF EXISTS "update_own_tickets" ON support_tickets;
+DROP POLICY IF EXISTS "staff_select_tickets" ON support_tickets;
+DROP POLICY IF EXISTS "staff_update_tickets" ON support_tickets;
+DROP POLICY IF EXISTS "select_own_replies" ON support_ticket_replies;
+DROP POLICY IF EXISTS "insert_own_replies" ON support_ticket_replies;
+DROP POLICY IF EXISTS "staff_select_replies" ON support_ticket_replies;
+DROP POLICY IF EXISTS "staff_insert_replies" ON support_ticket_replies;
+
+-- User policies: users see and manage their own tickets
+CREATE POLICY "select_own_tickets" ON support_tickets FOR SELECT
+  TO authenticated USING (auth.uid() = user_id);
+
+CREATE POLICY "insert_own_tickets" ON support_tickets FOR INSERT
+  TO authenticated WITH CHECK (auth.uid() = user_id);
+
+CREATE POLICY "update_own_tickets" ON support_tickets FOR UPDATE
+  TO authenticated USING (auth.uid() = user_id) WITH CHECK (auth.uid() = user_id);
+
+-- Staff policies: staff with support.manage can see and update all tickets
+CREATE POLICY "staff_select_tickets" ON support_tickets FOR SELECT
+  TO authenticated USING (
+    is_admin() OR EXISTS (
+      SELECT 1 FROM user_roles ur
+      JOIN role_permissions rp ON rp.role_id = ur.role_id
+      JOIN permissions p ON p.id = rp.permission_id
+      WHERE ur.user_id = auth.uid() AND p.code = 'support.manage'
+    )
+  );
+
+CREATE POLICY "staff_update_tickets" ON support_tickets FOR UPDATE
+  TO authenticated USING (
+    is_admin() OR EXISTS (
+      SELECT 1 FROM user_roles ur
+      JOIN role_permissions rp ON rp.role_id = ur.role_id
+      JOIN permissions p ON p.id = rp.permission_id
+      WHERE ur.user_id = auth.uid() AND p.code = 'support.manage'
+    )
+  );
+
+-- Reply policies: users see replies on their tickets, staff see all replies
+CREATE POLICY "select_own_replies" ON support_ticket_replies FOR SELECT
+  TO authenticated USING (
+    auth.uid() = user_id
+    OR is_admin()
+    OR EXISTS (
+      SELECT 1 FROM user_roles ur
+      JOIN role_permissions rp ON rp.role_id = ur.role_id
+      JOIN permissions p ON p.id = rp.permission_id
+      WHERE ur.user_id = auth.uid() AND p.code = 'support.manage'
+    )
+  );
+
+-- Users insert replies on their own tickets, staff insert replies on any ticket
+CREATE POLICY "insert_own_replies" ON support_ticket_replies FOR INSERT
+  TO authenticated WITH CHECK (
+    auth.uid() = user_id
+    OR is_admin()
+    OR EXISTS (
+      SELECT 1 FROM user_roles ur
+      JOIN role_permissions rp ON rp.role_id = ur.role_id
+      JOIN permissions p ON p.id = rp.permission_id
+      WHERE ur.user_id = auth.uid() AND p.code = 'support.manage'
+    )
+  );
+
+-- Grant support.manage to admin role in the database
+INSERT INTO role_permissions (role_id, permission_id)
+SELECT r.id, p.id FROM roles r, permissions p
+WHERE r.name = 'admin' AND p.code = 'support.manage'
+ON CONFLICT DO NOTHING;
+
+-- Notification trigger: notify staff when a new ticket is created
+CREATE OR REPLACE FUNCTION notify_new_ticket()
+RETURNS trigger
+LANGUAGE plpgsql
+SECURITY DEFINER
+SET search_path = public
+AS $$
+begin
+  INSERT INTO notifications (user_id, title, body, type, link)
+  SELECT ur.user_id, 'تذكرة دعم جديدة', 'تم استلام تذكرة جديدة: ' || NEW.subject, 'system', '/admin/support'
+  FROM user_roles ur
+  JOIN role_permissions rp ON rp.role_id = ur.role_id
+  JOIN permissions p ON p.id = rp.permission_id
+  WHERE p.code = 'support.manage'
+  AND ur.user_id != NEW.user_id;
+  RETURN NEW;
+end;
+$$;
+
+DROP TRIGGER IF EXISTS trg_notify_new_ticket ON support_tickets;
+CREATE TRIGGER trg_notify_new_ticket
+  AFTER INSERT ON support_tickets
+  FOR EACH ROW
+  EXECUTE FUNCTION notify_new_ticket();
+
+-- Notification when staff replies
+CREATE OR REPLACE FUNCTION notify_ticket_reply()
+RETURNS trigger
+LANGUAGE plpgsql
+SECURITY DEFINER
+SET search_path = public
+AS $$
+declare
+  ticket_user uuid;
+  ticket_subject text;
+begin
+  SELECT user_id, subject INTO ticket_user, ticket_subject FROM support_tickets WHERE id = NEW.ticket_id;
+  IF NEW.is_staff AND ticket_user != NEW.user_id THEN
+    INSERT INTO notifications (user_id, title, body, type, link)
+    VALUES (ticket_user, 'رد من خدمة العملاء', 'رد جديد على تذكرتك: ' || ticket_subject, 'system', '/support/my-tickets');
+  END IF;
+  RETURN NEW;
+end;
+$$;
+
+DROP TRIGGER IF EXISTS trg_notify_ticket_reply ON support_ticket_replies;
+CREATE TRIGGER trg_notify_ticket_reply
+  AFTER INSERT ON support_ticket_replies
+  FOR EACH ROW
+  EXECUTE FUNCTION notify_ticket_reply();
+
+
+-- ═══════════ 20261019000000_0017_product_requests.sql ═══════════
+-- 0017: "طلب منتج غير مدرج": the customer or employee sends a link and/or photo of a product from any local store
+-- that is not registered on Qistuha. Platform staff contact the store, coordinate the purchase and offer it on installment.
+-- Safe to run more than once.
+
+-- 1) Permission
+insert into permissions(code, description) values ('requests.manage', 'متابعة طلبات المنتجات غير المدرجة والتنسيق مع المتاجر')
+  on conflict (code) do nothing;
+insert into role_permissions(role_id, permission_id)
+  select r.id, p.id from roles r, permissions p where r.name = 'staff_orders' and p.code = 'requests.manage'
+  on conflict do nothing;
+
+-- 2) Table
+create table if not exists product_requests (
+  id uuid primary key default gen_random_uuid(),
+  request_number text unique not null default ('REQ-' || upper(substr(encode(gen_random_bytes(6), 'hex'), 1, 8))),
+  user_id uuid not null default auth.uid() references auth.users(id) on delete cascade,
+  full_name text,
+  phone text,
+  product_name text not null check (length(btrim(product_name)) between 2 and 200),
+  product_url text check (product_url is null or product_url ~* '^https?://'),
+  image_path text,
+  store_name text,
+  store_city text,
+  store_phone text,
+  estimated_price numeric(14,2) check (estimated_price is null or estimated_price > 0),
+  quantity int not null default 1 check (quantity between 1 and 100),
+  months int check (months is null or months in (6,9,12,18,24)),
+  notes text check (notes is null or length(notes) <= 2000),
+  status text not null default 'new' check (status in
+    ('new','contacting_store','store_confirmed','offer_sent','approved','purchased','rejected','cancelled')),
+  admin_note text,
+  quoted_price numeric(14,2) check (quoted_price is null or quoted_price > 0),
+  assigned_to uuid references auth.users(id) on delete set null,
+  created_at timestamptz not null default now(),
+  updated_at timestamptz not null default now(),
+  constraint link_or_image check (product_url is not null or image_path is not null)
+);
+create index if not exists idx_product_requests_user on product_requests(user_id, created_at desc);
+create index if not exists idx_product_requests_status on product_requests(status, created_at);
+
+-- 3) RLS: the sender inserts and reads their own; staff with requests.manage read and update all.
+alter table product_requests enable row level security;
+drop policy if exists pr_select_own on product_requests;
+drop policy if exists pr_insert_own on product_requests;
+drop policy if exists pr_staff_select on product_requests;
+drop policy if exists pr_staff_update on product_requests;
+create policy pr_select_own on product_requests for select to authenticated using (user_id = auth.uid());
+create policy pr_insert_own on product_requests for insert to authenticated
+  with check (user_id = auth.uid() and status = 'new' and admin_note is null and quoted_price is null and assigned_to is null
+    and (image_path is null or image_path like auth.uid()::text || '/%'));
+create policy pr_staff_select on product_requests for select to authenticated using (has_permission('requests.manage'));
+create policy pr_staff_update on product_requests for update to authenticated
+  using (has_permission('requests.manage')) with check (has_permission('requests.manage'));
+
+-- 4) Touch updated_at, and tell the sender when the status changes or a staff note is added.
+create or replace function _product_request_after() returns trigger
+language plpgsql set search_path = public as $$
+begin
+  new.updated_at := now();
+  return new;
+end $$;
+drop trigger if exists trg_product_request_touch on product_requests;
+create trigger trg_product_request_touch before update on product_requests
+  for each row execute function _product_request_after();
+
+create or replace function _product_request_notify() returns trigger
+language plpgsql security definer set search_path = public as $$
+declare msg text;
+begin
+  if tg_op = 'INSERT' then
+    perform _notify(new.user_id, 'استلمنا طلب المنتج', 'رقم الطلب ' || new.request_number || '. سنتواصل مع المتجر ونبلغك بالنتيجة.', 'system', '/requests');
+    return new;
+  end if;
+  if new.status is distinct from old.status then
+    msg := case new.status
+      when 'contacting_store' then 'نتواصل الآن مع المتجر بخصوص منتجك'
+      when 'store_confirmed'  then 'المتجر أكد توفر المنتج'
+      when 'offer_sent'       then 'جاهز عرض التقسيط لمنتجك. راجع التفاصيل'
+      when 'approved'         then 'تمت الموافقة على طلبك وسنشتري المنتج'
+      when 'purchased'        then 'تم شراء المنتج وسيصلك قريباً'
+      when 'rejected'         then 'تعذر توفير المنتج المطلوب'
+      when 'cancelled'        then 'تم إلغاء الطلب'
+      else null end;
+    if msg is not null then
+      perform _notify(new.user_id, 'تحديث على طلب المنتج ' || new.request_number,
+        msg || coalesce('. ملاحظة: ' || nullif(btrim(new.admin_note), ''), ''), 'system', '/requests');
+    end if;
+  end if;
+  return new;
+end $$;
+drop trigger if exists trg_product_request_notify on product_requests;
+create trigger trg_product_request_notify after insert or update on product_requests
+  for each row execute function _product_request_notify();
+
+-- 5) The sender may cancel their own request while it is still open (no direct UPDATE right for senders).
+create or replace function cancel_product_request(p_id uuid) returns void
+language plpgsql security definer set search_path = public as $$
+begin
+  update product_requests set status = 'cancelled'
+   where id = p_id and user_id = auth.uid() and status in ('new','contacting_store','store_confirmed','offer_sent');
+  if not found then raise exception 'cannot cancel this request'; end if;
+end $$;
+revoke execute on function cancel_product_request(uuid) from public, anon;
+grant execute on function cancel_product_request(uuid) to authenticated;
+
+-- 6) Private bucket for the photos. Each user writes to a folder named after their user id.
+insert into storage.buckets(id, name, public, file_size_limit, allowed_mime_types)
+  values ('request-images', 'request-images', false, 5242880, array['image/jpeg','image/png','image/webp'])
+  on conflict (id) do nothing;
+drop policy if exists "request images own insert" on storage.objects;
+drop policy if exists "request images read" on storage.objects;
+create policy "request images own insert" on storage.objects for insert to authenticated
+  with check (bucket_id = 'request-images' and (storage.foldername(name))[1] = auth.uid()::text);
+create policy "request images read" on storage.objects for select to authenticated
+  using (bucket_id = 'request-images' and ((storage.foldername(name))[1] = auth.uid()::text or has_permission('requests.manage')));
+
+-- ═══════════ 20261019010000_0018_currencies_invoices.sql ═══════════
+-- 0018: multi-currency (YER, SAR, USD) for products, orders and installments + real invoices (QR, public verification).
+-- Apply after 0017. Safe to run on a database that already has 0001..0017.
+
+-- ═════════ 1. Currencies and exchange rates ═════════
+-- yer_per_unit = how many Yemeni rials equal ONE unit of the currency. YER is always 1.
+-- The owner sets SAR and USD from the admin settings. The seeded numbers are placeholders: CHANGE THEM before launch.
+create table if not exists exchange_rates (
+  code text primary key check (code in ('YER','SAR','USD')),
+  yer_per_unit numeric(14,4) not null check (yer_per_unit > 0),
+  updated_by uuid references auth.users(id),
+  updated_at timestamptz not null default now(),
+  check (code <> 'YER' or yer_per_unit = 1)
+);
+insert into exchange_rates(code, yer_per_unit) values ('YER', 1), ('SAR', 140), ('USD', 530) on conflict (code) do nothing;
+alter table exchange_rates enable row level security;
+drop policy if exists rates_read on exchange_rates;
+create policy rates_read on exchange_rates for select using (true);   -- public: shown in the shop
+
+create or replace function set_exchange_rate(p_code text, p_rate numeric) returns void
+language plpgsql security definer set search_path = public as $$
+begin
+  if not is_admin() then raise exception 'not allowed'; end if;
+  if p_code not in ('SAR','USD') then raise exception 'only SAR and USD rates can be changed'; end if;
+  if p_rate is null or p_rate <= 0 or p_rate > 1000000 then raise exception 'invalid rate'; end if;
+  update exchange_rates set yer_per_unit = p_rate, updated_by = auth.uid(), updated_at = now() where code = p_code;
+  insert into audit_logs(actor_id, action, entity, entity_id, details)
+    values (auth.uid(), 'exchange_rate_set', 'exchange_rate', p_code, jsonb_build_object('yer_per_unit', p_rate));
+end $$;
+revoke execute on function set_exchange_rate(text,numeric) from public, anon;
+grant execute on function set_exchange_rate(text,numeric) to authenticated;
+
+create or replace function _round_money(p_amount numeric, p_cur text) returns numeric
+language sql immutable as $$ select case p_cur when 'YER' then round(p_amount, 0) else round(p_amount, 2) end $$;
+
+create or replace function _fx_convert(p_amount numeric, p_from text, p_to text) returns numeric
+language plpgsql stable set search_path = public as $$
+declare rf numeric; rt numeric;
+begin
+  if p_from = p_to then return p_amount; end if;
+  select yer_per_unit into rf from exchange_rates where code = p_from;
+  select yer_per_unit into rt from exchange_rates where code = p_to;
+  if rf is null or rt is null then raise exception 'unknown currency'; end if;
+  return p_amount * rf / rt;
+end $$;
+
+-- ═════════ 2. Currency columns ═════════
+alter table products add column if not exists currency text not null default 'YER' check (currency in ('YER','SAR','USD'));
+alter table orders add column if not exists currency text not null default 'YER' check (currency in ('YER','SAR','USD'));
+alter table order_items add column if not exists orig_currency text check (orig_currency in ('YER','SAR','USD'));
+alter table order_items add column if not exists orig_unit_price numeric(14,2);
+alter table order_items add column if not exists fx_rate numeric(18,8);
+alter table financing_applications add column if not exists currency text not null default 'YER' check (currency in ('YER','SAR','USD'));
+alter table commissions add column if not exists currency text not null default 'YER' check (currency in ('YER','SAR','USD'));
+alter table settlements add column if not exists currency text not null default 'YER' check (currency in ('YER','SAR','USD'));
+
+-- Commission is rounded in the order's own currency.
+drop function if exists compute_commission(numeric, int);
+create or replace function compute_commission(gross numeric, pct int, cur text default 'YER') returns numeric
+language sql immutable as $$ select _round_money(gross * pct / 100.0, cur) $$;
+
+create or replace function order_item_commission() returns trigger
+language plpgsql security definer set search_path = public as $$
+declare pct int; g numeric; c numeric; cur text;
+begin
+  if new.merchant_id is null then return new; end if;
+  select commission_percent into pct from merchants where id = new.merchant_id;
+  select currency into cur from orders where id = new.order_id;
+  g := new.quantity * new.unit_price;
+  c := compute_commission(g, pct, cur);
+  insert into commissions(order_item_id, merchant_id, percent, gross, commission, net, currency)
+  values (new.id, new.merchant_id, pct, g, c, g - c, cur);
+  return new;
+end $$;
+
+-- ═════════ 3. Invoices ═════════
+alter table invoices
+  add column if not exists kind text not null default 'sale' check (kind in ('sale','installment_sale')),
+  add column if not exists currency text not null default 'YER' check (currency in ('YER','SAR','USD')),
+  add column if not exists buyer_id uuid references auth.users(id),
+  add column if not exists buyer_name text,
+  add column if not exists buyer_phone text,
+  add column if not exists buyer_address text,
+  add column if not exists merchant_name text,
+  add column if not exists payment_method text,
+  add column if not exists months int,
+  add column if not exists markup_percent numeric(5,2),
+  add column if not exists deferred_total numeric(14,2),
+  add column if not exists monthly numeric(14,2),
+  add column if not exists contract_id uuid references contracts(id),
+  add column if not exists verify_code text unique default upper(encode(gen_random_bytes(8), 'hex')),
+  add column if not exists status text not null default 'issued' check (status in ('issued','void'));
+update invoices set verify_code = upper(encode(gen_random_bytes(8), 'hex')) where verify_code is null;
+create index if not exists idx_invoices_buyer on invoices(buyer_id, issued_at desc);
+
+drop policy if exists buyer_invoices on invoices;
+create policy buyer_invoices on invoices for select using (buyer_id = auth.uid());
+
+-- Builds one invoice per merchant for an order (idempotent). Internal: called by checkout and by the approval step.
+create or replace function _issue_invoices(p_order uuid) returns int
+language plpgsql security definer set search_path = public as $$
+declare
+  o orders; a financing_applications; c contracts; prof record; mn record;
+  groups jsonb; g jsonb; n int := 0; i int := 0; cnt int;
+  sub numeric; share_def numeric; run_def numeric := 0; run_mon numeric := 0; share_mon numeric;
+  items jsonb;
+begin
+  select * into o from orders where id = p_order;
+  if not found then raise exception 'order not found'; end if;
+  select * into a from financing_applications where order_id = p_order;
+  if o.payment_method = 'installment' then
+    if a.id is null then return 0; end if;
+    select * into c from contracts where application_id = a.id;
+    if c.id is null then return 0; end if;           -- no invoice before the contract exists
+  end if;
+  select full_name, phone into prof from user_profiles where id = o.user_id;
+
+  select coalesce(jsonb_agg(x order by x->>'merchant'), '[]'::jsonb) into groups from (
+    select jsonb_build_object('merchant', coalesce(oi.merchant_id::text, ''),
+             'sub', sum(oi.quantity * oi.unit_price),
+             'items', jsonb_agg(jsonb_build_object(
+                 'product_id', oi.product_id, 'name', p.name, 'qty', oi.quantity, 'unit_price', oi.unit_price,
+                 'line_total', oi.quantity * oi.unit_price, 'orig_currency', oi.orig_currency,
+                 'orig_unit_price', oi.orig_unit_price) order by p.name)) as x
+      from order_items oi join products p on p.id = oi.product_id
+     where oi.order_id = p_order group by oi.merchant_id) q;
+  cnt := jsonb_array_length(groups);
+
+  for g in select * from jsonb_array_elements(groups) loop
+    i := i + 1;
+    sub := (g->>'sub')::numeric;
+    items := g->'items';
+    select m.id, coalesce(m.store_name, m.business_name) as nm into mn from merchants m where m.id = nullif(g->>'merchant','')::uuid;
+    if o.payment_method = 'installment' then
+      -- every merchant invoice carries its proportional share of the deferred price; the last one absorbs rounding
+      if i = cnt then share_def := a.deferred_price - run_def; share_mon := a.monthly_installment - run_mon;
+      else
+        share_def := _round_money(a.deferred_price * sub / nullif(o.subtotal,0), o.currency);
+        share_mon := _round_money(a.monthly_installment * sub / nullif(o.subtotal,0), o.currency);
+      end if;
+      run_def := run_def + share_def; run_mon := run_mon + share_mon;
+    end if;
+    insert into invoices(order_id, merchant_id, items_json, subtotal, discount, shipping, total, kind, currency,
+        buyer_id, buyer_name, buyer_phone, buyer_address, merchant_name, payment_method, months, markup_percent,
+        deferred_total, monthly, contract_id)
+      values (p_order, mn.id, items, sub, 0, 0, sub,
+        case o.payment_method when 'installment' then 'installment_sale' else 'sale' end, o.currency,
+        o.user_id, coalesce(nullif(o.recipient_name,''), prof.full_name), coalesce(nullif(o.phone,''), prof.phone),
+        o.governorate || ' - ' || o.city || ' - ' || o.address, mn.nm, o.payment_method,
+        case when o.payment_method = 'installment' then a.months end,
+        case when o.payment_method = 'installment' then a.markup_percent_applied end,
+        case when o.payment_method = 'installment' then share_def end,
+        case when o.payment_method = 'installment' then share_mon end,
+        c.id)
+      on conflict (order_id, merchant_id) do nothing;
+    if found then n := n + 1; end if;
+  end loop;
+  if n > 0 then
+    perform _notify(o.user_id, 'صدرت فاتورتك', 'يمكنك عرضها وتنزيلها PDF من صفحة فواتيري', 'system', '/invoices');
+  end if;
+  return n;
+end $$;
+revoke execute on function _issue_invoices(uuid) from public, anon, authenticated;
+
+-- Staff can still (re)issue the invoices of an order by hand; it never duplicates.
+create or replace function issue_invoice(p_order uuid) returns int
+language plpgsql security definer set search_path = public as $$
+begin
+  if not (is_admin() or has_permission('orders.update')) then raise exception 'not allowed'; end if;
+  return _issue_invoices(p_order);
+end $$;
+
+-- Public check behind the QR code. Shows what proves the invoice is genuine and nothing personal.
+create or replace function verify_invoice(p_code text) returns jsonb
+language plpgsql stable security definer set search_path = public as $$
+declare i invoices; nm text;
+begin
+  if p_code is null or length(p_code) not between 8 and 40 then return jsonb_build_object('valid', false); end if;
+  select * into i from invoices where verify_code = upper(trim(p_code));
+  if not found then return jsonb_build_object('valid', false); end if;
+  nm := coalesce(i.buyer_name, '');
+  return jsonb_build_object(
+    'valid', i.status = 'issued', 'status', i.status, 'invoice_number', i.invoice_number, 'issued_at', i.issued_at,
+    'kind', i.kind, 'currency', i.currency, 'total', i.total, 'deferred_total', i.deferred_total, 'months', i.months,
+    'merchant_name', i.merchant_name,
+    'buyer_masked', case when length(nm) > 0 then left(nm, 1) || repeat('*', greatest(length(nm) - 1, 2)) else null end);
+end $$;
+revoke execute on function verify_invoice(text) from public;
+grant execute on function verify_invoice(text) to anon, authenticated;
+
+-- ═════════ Re-created functions (currency aware) ═════════
+create or replace function financing_before_insert() returns trigger
+language plpgsql security definer set search_path = public as $$
+declare uid uuid; m numeric; g guarantee_types; is_emp boolean := new.employee_id is not null;
+begin
+  if is_emp then
+    select user_id into uid from employees where id = new.employee_id;
+    new.applicant_user_id := uid;
+  else
+    uid := new.applicant_user_id;
+  end if;
+  if uid is null then raise exception 'applicant is required'; end if;
+
+  if new.guarantee_type_id is null then raise exception 'guarantee type is required'; end if;
+  select * into g from guarantee_types where id = new.guarantee_type_id and active;
+  if not found then raise exception 'invalid guarantee type'; end if;
+  if (is_emp and g.audience = 'customer') or (not is_emp and g.audience = 'employee') then
+    raise exception 'this guarantee type is not available for this applicant';
+  end if;
+  if g.requires_guarantor and (coalesce(trim(new.guarantor_name), '') = ''
+                               or coalesce(trim(new.guarantor_phone), '') = '') then
+    raise exception 'guarantor details are required for this guarantee type';
+  end if;
+
+  if new.branch_id is null then raise exception 'branch is required'; end if;
+  if not exists (select 1 from branches where id = new.branch_id and active) then raise exception 'invalid branch'; end if;
+
+  if not is_emp then            -- a customer has no employer: skip the company step
+    new.review_stage := 'admin';
+    new.status := 'awaiting_identity';
+  end if;
+
+  m := _markup_for(uid);
+  new.markup_percent_applied := m;
+  new.currency := coalesce(new.currency, 'YER');
+  new.deferred_price := _round_money(new.cash_price * (1 + m / 100), new.currency);
+  new.monthly_installment := _round_money(new.deferred_price / new.months, new.currency);
+  return new;
+end $$;
+
+create or replace function place_order(
+  p_items jsonb,                      -- [{"product_id": "...", "quantity": 2}, ...]
+  p_payment text,                     -- 'cash_on_delivery' | 'installment'
+  p_recipient text, p_phone text,
+  p_governorate text, p_city text, p_address text, p_notes text default null,
+  p_months int default null,
+  p_guarantee_type_id int default null,
+  p_guarantee_details jsonb default '{}'::jsonb,
+  p_guarantor_name text default null, p_guarantor_phone text default null, p_guarantor_id_number text default null,
+  p_branch_id uuid default null,
+  p_currency text default 'YER'          -- 'YER' | 'SAR' | 'USD': the currency the buyer pays / installs in
+) returns uuid
+language plpgsql security definer set search_path = public as $$
+declare
+  uid uuid := auth.uid();
+  oid uuid;
+  emp employees;
+  v_sub numeric(14,2) := 0;
+  v_lines jsonb;
+  v_n int;
+  r record;
+  unit numeric(14,2);
+  cur text := upper(coalesce(nullif(trim(p_currency),''), 'YER'));
+  base numeric;
+begin
+  if cur not in ('YER','SAR','USD') then raise exception 'unsupported currency'; end if;
+  if uid is null then raise exception 'not authenticated'; end if;
+  if p_payment not in ('cash_on_delivery','installment') then raise exception 'invalid payment method'; end if;
+  if jsonb_typeof(p_items) <> 'array' or jsonb_array_length(p_items) not between 1 and 50 then
+    raise exception 'cart must contain 1 to 50 lines';
+  end if;
+  if length(trim(coalesce(p_recipient,''))) < 2 or length(trim(coalesce(p_phone,''))) < 7
+     or length(trim(coalesce(p_governorate,''))) < 2 or length(trim(coalesce(p_city,''))) < 2
+     or length(trim(coalesce(p_address,''))) < 3 then
+    raise exception 'delivery data is incomplete';
+  end if;
+  if p_payment = 'installment' and p_months is null then raise exception 'installment months are required'; end if;
+
+  -- Lines: validate shape, merge duplicates, lock product rows in a stable order (no deadlocks).
+  select jsonb_agg(jsonb_build_object('p', pid, 'q', qty)) into v_lines from (
+    select (x->>'product_id')::uuid as pid, sum((x->>'quantity')::int) as qty
+      from jsonb_array_elements(p_items) x group by 1) g;
+  select count(*) into v_n from jsonb_to_recordset(v_lines) as l(p uuid, q int);
+  if exists (select 1 from jsonb_to_recordset(v_lines) as l(p uuid, q int) where q < 1 or q > 100) then
+    raise exception 'invalid quantity';
+  end if;
+  perform 1 from products where id in (select p from jsonb_to_recordset(v_lines) as l(p uuid, q int))
+    order by id for update;
+
+  insert into orders(user_id, payment_method, status, recipient_name, phone, governorate, city, address, notes,
+                     subtotal, discount, shipping, total, currency)
+    values (uid, p_payment, case p_payment when 'installment' then 'under_review' else 'new' end,
+            trim(p_recipient), trim(p_phone), trim(p_governorate), trim(p_city), trim(p_address), p_notes, 0, 0, 0, 0, cur)
+    returning id into oid;                       -- trg_require_active_account runs here
+
+  for r in
+    select l.p as product_id, l.q as qty, p.name, p.cash_price, p.discount_percent, p.stock, p.active, p.currency as pcur,
+           s.merchant_id, m.status as mstatus
+      from jsonb_to_recordset(v_lines) as l(p uuid, q int)
+      left join products p on p.id = l.p
+      left join stores s on s.id = p.store_id
+      left join merchants m on m.id = s.merchant_id
+     order by l.p
+  loop
+    if r.name is null or not r.active then raise exception 'product not available: %', r.product_id; end if;
+    if r.mstatus is distinct from 'active' then raise exception 'merchant is not active for product: %', r.name; end if;
+    if r.stock < r.qty then raise exception 'insufficient stock: %', r.name; end if;
+    base := _round_money(r.cash_price * (1 - r.discount_percent / 100.0), r.pcur);   -- price in the product's own currency
+    unit := _round_money(_fx_convert(base, r.pcur, cur), cur);                      -- price in the buyer's currency
+    update products set stock = stock - r.qty where id = r.product_id;
+    insert into order_items(order_id, product_id, merchant_id, quantity, unit_price, installment_months,
+                            orig_currency, orig_unit_price, fx_rate)
+      values (oid, r.product_id, r.merchant_id, r.qty, unit,
+              case p_payment when 'installment' then p_months end,
+              r.pcur, base, _fx_convert(1, r.pcur, cur));   -- commission row via trigger
+    v_sub := v_sub + unit * r.qty;
+  end loop;
+
+  update orders set subtotal = v_sub, total = v_sub where id = oid;
+  insert into order_status_history(order_id, status, changed_by, note)
+    values (oid, case p_payment when 'installment' then 'under_review' else 'new' end, uid, 'order placed');
+
+  if p_payment = 'installment' then
+    select * into emp from employees where user_id = uid;
+    -- financing_before_insert (0005) validates guarantee/branch/audience and fixes the price and markup.
+    insert into financing_applications(employee_id, applicant_user_id, company_id, order_id, cash_price, months,
+        guarantee_type_id, guarantor_name, guarantor_phone, guarantor_id_number, branch_id, currency)
+      values (emp.id, uid, emp.company_id, oid, v_sub, p_months,
+        p_guarantee_type_id, nullif(trim(p_guarantor_name),''), nullif(trim(p_guarantor_phone),''),
+        nullif(trim(p_guarantor_id_number),''), p_branch_id, cur);
+    insert into financing_guarantee_details(application_id, details)
+      select a.id, coalesce(p_guarantee_details, '{}'::jsonb) from financing_applications a where a.order_id = oid;
+  end if;
+
+  if p_payment <> 'installment' then perform _issue_invoices(oid); end if;   -- installment invoices are issued on approval
+
+  insert into audit_logs(actor_id, action, entity, entity_id, details)
+    values (uid, 'order_placed', 'order', oid::text,
+            jsonb_build_object('payment', p_payment, 'total', v_sub, 'months', p_months, 'currency', cur));
+  return oid;
+end $$;
+
+create or replace function decide_application(p_app uuid, p_approve boolean, p_note text default null) returns uuid
+language plpgsql security definer set search_path = public as $$
+declare a financing_applications; e employees; cid uuid; n int; monthly numeric; amt numeric; idv text;
+begin
+  if not (is_admin() or has_permission('financing.review')) then raise exception 'not allowed'; end if;
+  select * into a from financing_applications where id = p_app for update;
+  if not found then raise exception 'application not found'; end if;
+  if a.review_stage <> 'admin' or a.status in ('approved','rejected','completed') then raise exception 'application is not waiting for the platform'; end if;
+  if not p_approve and coalesce(trim(p_note),'') = '' then raise exception 'a reason is required to reject'; end if;
+
+  if not p_approve then
+    update financing_applications set status = 'rejected', rejection_reason = p_note, admin_note = p_note,
+      admin_decided_by = auth.uid(), admin_decided_at = now() where id = p_app;
+    if a.order_id is not null then perform _cancel_order(a.order_id, 'application rejected'); end if;
+    insert into audit_logs(actor_id, action, entity, entity_id, details)
+      values (auth.uid(), 'application_rejected', 'financing_application', p_app::text, jsonb_build_object('note', p_note));
+    perform _notify(a.applicant_user_id, 'تم رفض طلب التقسيط', coalesce(p_note,''), 'installment');
+    return null;
+  end if;
+
+  select identity_status into idv from user_profiles where id = a.applicant_user_id;
+  if idv is distinct from 'verified' then raise exception 'the applicant identity is not verified yet'; end if;
+  if a.employee_id is not null then
+    select * into e from employees where id = a.employee_id for update;
+    if e.eligibility <> 'eligible' then raise exception 'the employee is not eligible'; end if;
+    if e.used_limit + _fx_convert(a.deferred_price, a.currency, 'YER') > e.installment_limit then raise exception 'installment limit exceeded'; end if;
+    update employees set used_limit = used_limit + _fx_convert(a.deferred_price, a.currency, 'YER') where id = e.id;
+  end if;
+
+  insert into contracts(application_id, status, contract_number, start_date)
+    values (p_app, 'active', 'CON-' || nextval('contract_number_seq'), current_date) returning id into cid;
+  monthly := a.monthly_installment;
+  for n in 1..a.months loop
+    amt := case when n = a.months then a.deferred_price - monthly * (a.months - 1) else monthly end;
+    insert into installments(contract_id, number, due_date, amount, status)
+      values (cid, n, current_date + 30 * n, amt, case when n = 1 then 'due' else 'upcoming' end);
+  end loop;
+  update financing_applications set status = 'approved', admin_note = p_note,
+    admin_decided_by = auth.uid(), admin_decided_at = now() where id = p_app;
+  if a.order_id is not null then
+    update orders set status = 'approved' where id = a.order_id and status in ('new','under_review','awaiting_payment');
+    insert into order_status_history(order_id, status, changed_by, note) values (a.order_id, 'approved', auth.uid(), 'financing approved');
+  end if;
+  if a.order_id is not null then perform _issue_invoices(a.order_id); end if;
+  insert into audit_logs(actor_id, action, entity, entity_id, details)
+    values (auth.uid(), 'application_approved', 'financing_application', p_app::text, jsonb_build_object('contract', cid));
+  perform _notify(a.applicant_user_id, 'تمت الموافقة على طلب التقسيط', 'تم إنشاء عقدك وجدول الأقساط وفاتورتك', 'installment');
+  return cid;
+end $$;
+
+create or replace function record_payment(p_installment uuid, p_amount numeric, p_method text default 'cash') returns uuid
+language plpgsql security definer set search_path = public as $$
+declare i installments; k contracts; a financing_applications; pid uuid; left_n int;
+begin
+  if not (is_admin() or has_permission('payments.record')) then raise exception 'not allowed'; end if;
+  select * into i from installments where id = p_installment for update;
+  if not found then raise exception 'installment not found'; end if;
+  if i.status = 'paid' then raise exception 'installment already paid'; end if;
+  if p_amount is distinct from i.amount then raise exception 'amount must equal the installment amount (%)', i.amount; end if;
+  select * into k from contracts where id = i.contract_id;
+  select * into a from financing_applications where id = k.application_id;
+
+  insert into payments(installment_id, amount, method, recorded_by, contract_id, order_id, payment_number, status)
+    values (i.id, p_amount, nullif(trim(p_method),''), auth.uid(), k.id, a.order_id,
+            'PAY-' || upper(substr(gen_random_uuid()::text, 1, 8)), 'succeeded') returning id into pid;
+  update installments set status = 'paid' where id = i.id;
+  if a.employee_id is not null then
+    update employees set used_limit = greatest(0, used_limit - _fx_convert(p_amount, a.currency, 'YER')) where id = a.employee_id;
+  end if;
+  select count(*) into left_n from installments where contract_id = k.id and status <> 'paid';
+  if left_n = 0 then
+    update contracts set status = 'completed' where id = k.id;
+    update financing_applications set status = 'completed' where id = a.id;
+    perform _notify(a.applicant_user_id, 'اكتمل سداد العقد', 'شكراً لالتزامك', 'payment');
+  else
+    update installments set status = 'due' where id = (select id from installments where contract_id = k.id and status = 'upcoming' order by number limit 1)
+      and not exists (select 1 from installments where contract_id = k.id and status in ('due','late','overdue'));
+    perform _notify(a.applicant_user_id, 'تم تسجيل دفعة', 'القسط رقم ' || i.number || ' بمبلغ ' || p_amount || ' ' || a.currency, 'payment');
+  end if;
+  insert into audit_logs(actor_id, action, entity, entity_id, details)
+    values (auth.uid(), 'payment_recorded', 'installment', i.id::text, jsonb_build_object('amount', p_amount, 'method', p_method));
+  return pid;
+end $$;
+
+create or replace function set_commission_settlement(p_commission uuid, p_status text) returns void
+language plpgsql security definer set search_path = public as $$
+declare c commissions; sid uuid;
+begin
+  if not is_admin() then raise exception 'not allowed'; end if;
+  if p_status not in ('processing','in_progress','paid') then raise exception 'invalid status'; end if;
+  select * into c from commissions where id = p_commission for update;
+  if not found then raise exception 'commission not found'; end if;
+  if c.settlement_id is null then
+    insert into settlements(merchant_id, gross, commission, net, status, created_by, currency)
+      values (c.merchant_id, c.gross, c.commission, c.net, p_status, auth.uid(), c.currency) returning id into sid;
+    update commissions set settlement_id = sid where id = c.id;
+  else
+    update settlements set status = p_status, paid_at = case when p_status = 'paid' then now() end where id = c.settlement_id;
+  end if;
+  insert into audit_logs(actor_id, action, entity, entity_id, details)
+    values (auth.uid(), 'settlement_status', 'commission', p_commission::text, jsonb_build_object('status', p_status));
+end $$;
+
+-- ═════════ Grants for the re-created checkout ═════════
+drop function if exists place_order(jsonb,text,text,text,text,text,text,text,int,int,jsonb,text,text,text,uuid);
+revoke execute on function place_order(jsonb,text,text,text,text,text,text,text,int,int,jsonb,text,text,text,uuid,text) from public, anon;
+grant execute on function place_order(jsonb,text,text,text,text,text,text,text,int,int,jsonb,text,text,text,uuid,text) to authenticated;
+revoke execute on function decide_application(uuid,boolean,text), record_payment(uuid,numeric,text),
+  set_commission_settlement(uuid,text) from public, anon;
+grant execute on function decide_application(uuid,boolean,text), record_payment(uuid,numeric,text),
+  set_commission_settlement(uuid,text) to authenticated;

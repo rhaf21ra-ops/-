@@ -40,7 +40,8 @@ export function Footer() {
           <div>
             <h3 className="font-semibold mb-3">تواصل معنا</h3>
             <ul className="space-y-2 text-sm text-muted-foreground">
-              <li><Link href="/admin-login" className="flex items-center gap-2 hover:text-foreground"><Mail className="h-4 w-4" /> دخول الإدارة والموظفين</Link></li>
+              <li><Link href="/request-product" className="flex items-center gap-2 hover:text-foreground"><Mail className="h-4 w-4" /> طلب منتج غير مدرج</Link></li>
+              <li><Link href="/support" className="flex items-center gap-2 hover:text-foreground"><Mail className="h-4 w-4" /> خدمة العملاء</Link></li>
               <li className="flex items-center gap-2"><MapPin className="h-4 w-4" /> صنعاء، اليمن</li>
             </ul>
           </div>
@@ -49,7 +50,7 @@ export function Footer() {
         <div className="border-t mt-8 pt-6 space-y-2 text-center text-sm text-muted-foreground">
           <p>© {new Date().getFullYear()} {BRAND.name}. جميع الحقوق محفوظة.</p>
           <p className="text-xs max-w-3xl mx-auto leading-relaxed">
-            هذه منصة تجريبية (Demo) ولا تقدم خدمات مالية فعلية. خدمات التقسيط والدفع الفعلية تخضع مستقبلاً للجهات المرخصة من البنك المركزي اليمني والأنظمة المعمول بها في الجمهورية اليمنية.
+            يُعرض سعر التقسيط وقيمة القسط بوضوح قبل تأكيد أي طلب، وتخضع الخدمة للأنظمة المعمول بها في الجمهورية اليمنية.
             التحقق من الهوية خطوة منفصلة عن تقييم الأهلية المالية، ولا يتم اتخاذ أي قرار تمويلي بشكل تلقائي.
           </p>
         </div>

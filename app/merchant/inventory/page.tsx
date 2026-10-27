@@ -7,7 +7,7 @@ import { Input } from "@/components/ui/input";
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
 import { useApp } from "@/lib/store";
 import { formatCurrency } from "@/lib/brand";
-import { Home, Package, ShoppingBag, Boxes, Wallet, Settings, AlertTriangle } from "lucide-react";
+import { Home, Package, ShoppingBag, Boxes, Wallet, Settings, AlertTriangle, FileText } from "lucide-react";
 import type { LucideIcon } from "lucide-react";
 import { toast } from "sonner";
 
@@ -17,11 +17,12 @@ const navItems: { href: string; label: string; icon: LucideIcon }[] = [
   { href: "/merchant/orders", label: "الطلبات", icon: ShoppingBag },
   { href: "/merchant/inventory", label: "المخزون", icon: Boxes },
   { href: "/merchant/settlements", label: "التسويات", icon: Wallet },
+  { href: "/invoices", label: "الفواتير", icon: FileText },
   { href: "/merchant/settings", label: "الإعدادات", icon: Settings },
 ];
 
 export default function MerchantInventoryPage() {
-  const { currentUser, merchants, products, updateProduct } = useApp();
+  const { currentUser, merchants, products, updateProduct, isReal } = useApp();
   const merchant = merchants.find(m => m.userId === currentUser?.id);
   const myProducts = products.filter(p => p.merchantId === merchant?.id);
 
@@ -60,7 +61,7 @@ export default function MerchantInventoryPage() {
                 <TableRow key={p.id}>
                   <TableCell className="font-medium text-sm line-clamp-1 max-w-40">{p.name}</TableCell>
                   <TableCell className="text-sm">{p.category}</TableCell>
-                  <TableCell className="text-sm">{formatCurrency(p.cashPrice)}</TableCell>
+                  <TableCell className="text-sm">{formatCurrency(p.cashPrice, p.currency)}</TableCell>
                   <TableCell className="text-sm font-bold">{p.stock}</TableCell>
                   <TableCell>
                     {p.stock === 0 ? (
@@ -81,7 +82,7 @@ export default function MerchantInventoryPage() {
                           const val = Number(e.target.value);
                           if (val !== p.stock) {
                             updateProduct(p.id, { stock: val });
-                            toast.success("تم تحديث المخزون");
+                            if (!isReal) toast.success("تم تحديث المخزون");
                           }
                         }}
                       />

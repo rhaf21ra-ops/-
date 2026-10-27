@@ -74,14 +74,6 @@ function AdminLoginContent() {
             <p className="text-sm text-muted-foreground">للمالك وموظفي {BRAND.name} فقط</p>
           </CardHeader>
           <CardContent className="space-y-4">
-            {demoMode && (
-              <Alert className="border-amber-300 bg-amber-50">
-                <AlertDescription className="text-xs text-amber-900">
-                  الوضع التجريبي: الحسابات محفوظة في هذا المتصفح فقط ولا تنتقل بين الأجهزة. للحسابات الحقيقية أضف مفاتيح Supabase في Netlify.
-                  {!ownerExists && " لا يوجد مالك بعد: ما تدخله هنا يصبح حساب المالك."}
-                </AlertDescription>
-              </Alert>
-            )}
             {notStaff && (
               <Alert variant="destructive">
                 <AlertDescription className="flex items-center justify-between gap-2 text-sm">

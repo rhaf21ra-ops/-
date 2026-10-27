@@ -18,17 +18,7 @@ import {
 } from "@/components/ui/table";
 import { useApp } from "@/lib/store";
 import { formatCurrency } from "@/lib/brand";
-import {
-  Home,
-  ShoppingBag,
-  CreditCard,
-  Wallet,
-  Bell,
-  User,
-  Receipt,
-  CheckCircle2,
-  ArrowLeft,
-} from "lucide-react";
+import { Home, ShoppingBag, CreditCard, Wallet, Bell, User, Receipt, CheckCircle2, ArrowLeft, PackagePlus, ClipboardList, FileText } from "lucide-react";
 import type { LucideIcon } from "lucide-react";
 
 const navItems: { href: string; label: string; icon: LucideIcon }[] = [
@@ -36,12 +26,15 @@ const navItems: { href: string; label: string; icon: LucideIcon }[] = [
   { href: "/employee/orders", label: "طلباتي", icon: ShoppingBag },
   { href: "/employee/installments", label: "التقسيط", icon: CreditCard },
   { href: "/employee/payments", label: "المدفوعات", icon: Wallet },
+  { href: "/request-product", label: "طلب منتج غير مدرج", icon: PackagePlus },
+  { href: "/requests", label: "طلباتي الخاصة", icon: ClipboardList },
+  { href: "/invoices", label: "فواتيري", icon: FileText },
   { href: "/employee/notifications", label: "الإشعارات", icon: Bell },
   { href: "/employee/profile", label: "الملف الشخصي", icon: User },
 ];
 
 export default function EmployeePaymentsPage() {
-  const { currentUser, employees, installmentContracts, payments } = useApp();
+  const { currentUser, employees, installmentContracts, payments, toYER } = useApp();
 
   const employee = employees.find((e) => e.userId === currentUser?.id);
   const myContracts = installmentContracts.filter(
@@ -62,7 +55,7 @@ export default function EmployeePaymentsPage() {
 
   const totalPaid = myPayments
     .filter((p) => p.status === "ناجح")
-    .reduce((sum, p) => sum + p.amount, 0);
+    .reduce((sum, p) => sum + toYER(p.amount, p.currency), 0);
 
   return (
     <DashboardLayout navItems={navItems} title="لوحة الموظف" role="employee">
@@ -137,7 +130,7 @@ export default function EmployeePaymentsPage() {
                         {new Date(p.createdAt).toLocaleDateString("ar-YE")}
                       </TableCell>
                       <TableCell className="text-sm font-medium">
-                        {formatCurrency(p.amount)}
+                        {formatCurrency(p.amount, p.currency)}
                       </TableCell>
                       <TableCell className="text-sm">{p.method}</TableCell>
                       <TableCell className="text-sm">

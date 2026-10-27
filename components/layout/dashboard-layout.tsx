@@ -32,7 +32,8 @@ export function DashboardLayout({
   const { currentUser, logout, notifications } = useApp()
   const { signOut, user: authUser } = useAuth()
   // Staff only see the pages their permissions allow (owner sees all).
-  const navItems = allNavItems.filter((i) => canAccess(i.href, authUser) || (authUser && !authUser.roles.some((r) => r === "admin" || r.startsWith("staff_")) ))
+  // سابقاً كان الشرط الثاني يُظهر كل عناصر الإدارة للتاجر/العميل → يسبب تداخل القوائم
+  const navItems = allNavItems.filter((i) => canAccess(i.href, authUser))
   const pathname = usePathname()
   const router = useRouter()
   const [open, setOpen] = useState(false)
@@ -65,10 +66,10 @@ export function DashboardLayout({
   ))
 
   return (
-    <div className="min-h-screen bg-muted/30">
+    <div key={`${role}-${pathname}`} className="min-h-screen bg-muted/30 isolate">
       <div className="flex">
-        {/* Desktop sidebar */}
-        <aside className="hidden md:flex w-64 flex-col fixed inset-y-0 right-0 border-l bg-card">
+        {/* Desktop sidebar - معزولة عن هيدر المتجر */}
+        <aside className="hidden md:flex w-64 flex-col fixed inset-y-0 right-0 border-l bg-card z-20">
           <div className="flex h-full flex-col">
             <div className="flex items-center gap-2 p-6 border-b">
               <Link href="/" className="flex items-center gap-2">
@@ -99,7 +100,7 @@ export function DashboardLayout({
         </aside>
 
         <div className="flex-1 md:mr-64 flex flex-col min-h-screen">
-          <header className="sticky top-0 z-30 border-b bg-background/95 backdrop-blur h-16 flex items-center justify-between px-4">
+          <header className="sticky top-0 z-20 border-b bg-background/95 backdrop-blur h-16 flex items-center justify-between px-4">
             <div className="flex items-center gap-3">
               {/* Mobile sidebar */}
               <Sheet open={open} onOpenChange={setOpen}>

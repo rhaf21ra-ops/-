@@ -9,6 +9,8 @@ import { Label } from "@/components/ui/label";
 import { useApp } from "@/lib/store";
 import { ROLE_LABELS } from "@/lib/constants";
 import { toast } from "sonner";
+import { KeyRound } from "lucide-react";
+import Link from "next/link";
 
 export default function ProfilePage() {
   const { currentUser } = useApp();
@@ -53,6 +55,11 @@ export default function ProfilePage() {
               <div><Label className="mb-1.5 block">البريد الإلكتروني</Label><Input defaultValue={currentUser.email} dir="ltr" /></div>
               <div><Label className="mb-1.5 block">رقم الهاتف</Label><Input defaultValue={currentUser.phone} dir="ltr" /></div>
               <Button onClick={() => toast.success("تم حفظ التغييرات")}>حفظ التغييرات</Button>
+              <Link href="/profile/change-password">
+                <Button variant="outline" className="w-full">
+                  <KeyRound className="h-4 w-4 ml-2" /> تغيير كلمة المرور
+                </Button>
+              </Link>
             </CardContent>
           </Card>
         </div>

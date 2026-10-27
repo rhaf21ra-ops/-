@@ -3,6 +3,7 @@ import { cn } from "@/lib/utils"
 const statusColors: Record<string, string> = {
   "جديد": "bg-blue-100 text-blue-700",
   "قيد المراجعة": "bg-yellow-100 text-yellow-700",
+  "بانتظار الشركة": "bg-orange-100 text-orange-700",
   "تمت الموافقة": "bg-green-100 text-green-700",
   "قيد التجهيز": "bg-orange-100 text-orange-700",
   "تم الشحن": "bg-cyan-100 text-cyan-700",

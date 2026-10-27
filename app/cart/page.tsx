@@ -1,6 +1,8 @@
 "use client";
 
 import Link from "next/link";
+import { CurrencySwitch } from "@/components/CurrencySwitch";
+import { roundMoney } from "@/lib/currency";
 import { useRouter } from "next/navigation";
 import { Header } from "@/components/layout/header";
 import { Footer } from "@/components/layout/footer";
@@ -17,10 +19,11 @@ import { Trash2, ShoppingCart, ArrowLeft, CreditCard, Wallet, Truck } from "luci
 import { toast } from "sonner";
 
 export default function CartPage() {
-  const { cart, removeFromCart, updateCartQuantity, updateCartPaymentType, clearCart, cartTotal, currentUser } = useApp();
+  const { cart, removeFromCart, updateCartQuantity, updateCartPaymentType, clearCart, cartTotal, currentUser, toPay, payCurrency, isReal } = useApp();
   const router = useRouter();
 
-  const deliveryFee = cart.length > 0 ? 5000 : 0;
+  // Real mode: the server total has no delivery fee yet, so none is shown (never display a price that is not charged).
+  const deliveryFee = cart.length > 0 && !isReal ? toPay(5000, "YER") : 0;
   const grandTotal = cartTotal + deliveryFee;
 
   const handleCheckout = () => {
@@ -92,7 +95,7 @@ export default function CartPage() {
                           <span className="text-xs text-muted-foreground">طريقة الدفع:</span>
                           <Select
                             value={item.paymentType}
-                            onValueChange={(v: "نقدي" | "تقسيط") => updateCartPaymentType(item.productId, v)}
+                            onValueChange={(v) => updateCartPaymentType(item.productId, v as "نقدي" | "تقسيط")}
                           >
                             <SelectTrigger className="h-8 w-28 text-xs">
                               <SelectValue />
@@ -134,12 +137,12 @@ export default function CartPage() {
                           {item.paymentType === "تقسيط" ? "السعر المؤجل" : "السعر النقدي"}
                         </span>
                         <span className="font-bold text-primary">
-                          {formatCurrency((item.paymentType === "تقسيط" ? item.deferredPrice : item.cashPrice) * item.quantity)}
+                          {formatCurrency(toPay(item.paymentType === "تقسيط" ? item.deferredPrice : item.cashPrice, item.currency) * item.quantity, payCurrency)}
                         </span>
                       </div>
                       {item.paymentType === "تقسيط" && (
                         <p className="text-xs text-muted-foreground mt-1">
-                          قسط شهري: {formatCurrency(Math.round(item.deferredPrice / (item.durationMonths || 12) * item.quantity))}
+                          قسط شهري: {formatCurrency(roundMoney(toPay(item.deferredPrice, item.currency) * item.quantity / (item.durationMonths || 12), payCurrency), payCurrency)}
                         </p>
                       )}
                     </div>
@@ -167,24 +170,25 @@ export default function CartPage() {
             <Card className="sticky top-20">
               <CardContent className="p-5 space-y-4">
                 <h2 className="font-bold text-lg">ملخص الطلب</h2>
+                <CurrencySwitch />
                 <Separator />
                 <div className="space-y-2 text-sm">
                   <div className="flex justify-between">
                     <span className="text-muted-foreground">إجمالي المنتجات</span>
-                    <span className="font-medium">{formatCurrency(cartTotal)}</span>
+                    <span className="font-medium">{formatCurrency(cartTotal, payCurrency)}</span>
                   </div>
                   <div className="flex justify-between">
                     <span className="text-muted-foreground flex items-center gap-1">
                       <Truck className="h-4 w-4" />
                       رسوم التوصيل
                     </span>
-                    <span className="font-medium">{formatCurrency(deliveryFee)}</span>
+                    <span className="font-medium">{formatCurrency(deliveryFee, payCurrency)}</span>
                   </div>
                 </div>
                 <Separator />
                 <div className="flex justify-between text-base">
                   <span className="font-bold">الإجمالي</span>
-                  <span className="font-bold text-primary">{formatCurrency(grandTotal)}</span>
+                  <span className="font-bold text-primary">{formatCurrency(grandTotal, payCurrency)}</span>
                 </div>
                 <Button className="w-full" size="lg" onClick={handleCheckout}>
                   <CreditCard className="h-5 w-5 ml-2" />
@@ -192,7 +196,7 @@ export default function CartPage() {
                 </Button>
                 <div className="flex items-center justify-center gap-2 text-xs text-muted-foreground">
                   <Wallet className="h-4 w-4" />
-                  دفع آمن - نسخة تجريبية
+                  دفع آمن
                 </div>
               </CardContent>
             </Card>

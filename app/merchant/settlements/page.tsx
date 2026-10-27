@@ -9,7 +9,7 @@ import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { useApp } from "@/lib/store";
 import { formatCurrency } from "@/lib/brand";
-import { Home, Package, ShoppingBag, Boxes, Wallet, Settings } from "lucide-react";
+import { Home, Package, ShoppingBag, Boxes, Wallet, Settings, FileText } from "lucide-react";
 import type { LucideIcon } from "lucide-react";
 import { toast } from "sonner";
 import type { SettlementStatus } from "@/lib/constants";
@@ -20,16 +20,17 @@ const navItems: { href: string; label: string; icon: LucideIcon }[] = [
   { href: "/merchant/orders", label: "الطلبات", icon: ShoppingBag },
   { href: "/merchant/inventory", label: "المخزون", icon: Boxes },
   { href: "/merchant/settlements", label: "التسويات", icon: Wallet },
+  { href: "/invoices", label: "الفواتير", icon: FileText },
   { href: "/merchant/settings", label: "الإعدادات", icon: Settings },
 ];
 
 export default function MerchantSettlementsPage() {
-  const { currentUser, merchants, settlements, updateSettlementStatus } = useApp();
+  const { currentUser, merchants, settlements, updateSettlementStatus, toYER } = useApp();
   const merchant = merchants.find(m => m.userId === currentUser?.id);
   const mySettlements = settlements.filter(s => s.merchantId === merchant?.id);
 
-  const totalPending = mySettlements.filter(s => s.status !== "مدفوع").reduce((s, st) => s + st.merchantAmount, 0);
-  const totalPaid = mySettlements.filter(s => s.status === "مدفوع").reduce((s, st) => s + st.merchantAmount, 0);
+  const totalPending = mySettlements.filter(s => s.status !== "مدفوع").reduce((s, st) => s + toYER(st.merchantAmount, st.currency), 0);
+  const totalPaid = mySettlements.filter(s => s.status === "مدفوع").reduce((s, st) => s + toYER(st.merchantAmount, st.currency), 0);
 
   return (
     <DashboardLayout navItems={navItems} title="التسويات" role="merchant">
@@ -59,8 +60,8 @@ export default function MerchantSettlementsPage() {
                 {mySettlements.map(s => (
                   <TableRow key={s.id}>
                     <TableCell className="font-medium text-sm">{s.orderNumber}</TableCell>
-                    <TableCell className="text-sm">{formatCurrency(s.saleValue)}</TableCell>
-                    <TableCell className="text-sm font-bold">{formatCurrency(s.merchantAmount)}</TableCell>
+                    <TableCell className="text-sm">{formatCurrency(s.saleValue, s.currency)}</TableCell>
+                    <TableCell className="text-sm font-bold">{formatCurrency(s.merchantAmount, s.currency)}</TableCell>
                     <TableCell><StatusBadge status={s.status} /></TableCell>
                     <TableCell className="text-xs text-muted-foreground">{new Date(s.date).toLocaleDateString("ar-YE")}</TableCell>
                   </TableRow>

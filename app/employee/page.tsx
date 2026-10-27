@@ -24,23 +24,9 @@ import {
   TableRow,
 } from "@/components/ui/table";
 import { useApp } from "@/lib/store";
+import { JoinCompany } from "@/components/JoinCompany";
 import { formatCurrency } from "@/lib/brand";
-import {
-  Home,
-  ShoppingBag,
-  CreditCard,
-  Wallet,
-  Bell,
-  User,
-  CalendarClock,
-  TrendingDown,
-  Receipt,
-  ArrowLeft,
-  ShieldCheck,
-  AlertTriangle,
-  Clock,
-  CheckCircle2,
-} from "lucide-react";
+import { Home, ShoppingBag, CreditCard, Wallet, Bell, User, CalendarClock, TrendingDown, Receipt, ArrowLeft, ShieldCheck, AlertTriangle, Clock, CheckCircle2, PackagePlus, ClipboardList, FileText } from "lucide-react";
 import type { LucideIcon } from "lucide-react";
 
 const navItems: { href: string; label: string; icon: LucideIcon }[] = [
@@ -48,6 +34,9 @@ const navItems: { href: string; label: string; icon: LucideIcon }[] = [
   { href: "/employee/orders", label: "طلباتي", icon: ShoppingBag },
   { href: "/employee/installments", label: "التقسيط", icon: CreditCard },
   { href: "/employee/payments", label: "المدفوعات", icon: Wallet },
+  { href: "/request-product", label: "طلب منتج غير مدرج", icon: PackagePlus },
+  { href: "/requests", label: "طلباتي الخاصة", icon: ClipboardList },
+  { href: "/invoices", label: "فواتيري", icon: FileText },
   { href: "/employee/notifications", label: "الإشعارات", icon: Bell },
   { href: "/employee/profile", label: "الملف الشخصي", icon: User },
 ];
@@ -59,7 +48,7 @@ export default function EmployeeDashboardPage() {
     orders,
     installmentContracts,
     identityVerifications,
-  } = useApp();
+    isReal, toYER } = useApp();
 
   const employee = employees.find((e) => e.userId === currentUser?.id);
 
@@ -73,7 +62,7 @@ export default function EmployeeDashboardPage() {
 
   const activeInstallmentsCount = activeContracts.length;
   const totalRemaining = activeContracts.reduce(
-    (sum, c) => sum + c.remainingAmount,
+    (sum, c) => sum + toYER(c.remainingAmount, c.currency),
     0
   );
   const ordersCount = myOrders.length;
@@ -113,6 +102,7 @@ export default function EmployeeDashboardPage() {
       title="لوحة الموظف"
       role="employee"
     >
+      {isReal && currentUser && !employee && <JoinCompany />}
       {/* Welcome */}
       <div className="mb-6">
         <h1 className="text-2xl font-bold">
@@ -208,7 +198,7 @@ export default function EmployeeDashboardPage() {
         <StatCard
           title="القسط القادم"
           value={
-            nextDuePayment ? formatCurrency(nextDuePayment.amount) : "—"
+            nextDuePayment ? formatCurrency(nextDuePayment.amount, nextDuePayment.currency) : "—"
           }
           icon={CalendarClock}
           description={
@@ -268,7 +258,7 @@ export default function EmployeeDashboardPage() {
                         {new Date(o.createdAt).toLocaleDateString("ar-YE")}
                       </TableCell>
                       <TableCell className="text-xs">
-                        {formatCurrency(o.total)}
+                        {formatCurrency(o.total, o.currency)}
                       </TableCell>
                       <TableCell>
                         <StatusBadge status={o.status} />
@@ -331,10 +321,10 @@ export default function EmployeeDashboardPage() {
                       <Progress value={progress} className="h-2 mb-2" />
                       <div className="flex items-center justify-between text-xs">
                         <span className="text-green-600">
-                          مدفوع: {formatCurrency(c.paidAmount)}
+                          مدفوع: {formatCurrency(c.paidAmount, c.currency)}
                         </span>
                         <span className="text-orange-600">
-                          متبقي: {formatCurrency(c.remainingAmount)}
+                          متبقي: {formatCurrency(c.remainingAmount, c.currency)}
                         </span>
                       </div>
                     </Link>

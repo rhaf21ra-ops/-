@@ -76,7 +76,7 @@ export default function AdminOrdersPage() {
                   <TableCell className="text-sm">{o.items[0]?.merchantName}</TableCell>
                   <TableCell className="text-sm line-clamp-1 max-w-32">{o.items[0]?.productName}</TableCell>
                   <TableCell className="text-sm">{o.paymentType}</TableCell>
-                  <TableCell className="text-sm">{formatCurrency(o.total)}</TableCell>
+                  <TableCell className="text-sm">{formatCurrency(o.total, o.currency)}</TableCell>
                   <TableCell className="text-sm">{o.city}</TableCell>
                   <TableCell><StatusBadge status={o.status} /></TableCell>
                   <TableCell className="text-xs text-muted-foreground">{new Date(o.createdAt).toLocaleDateString("ar-YE")}</TableCell>

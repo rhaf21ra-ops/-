@@ -26,21 +26,7 @@ import {
 import { useApp } from "@/lib/store";
 import { formatCurrency } from "@/lib/brand";
 import { ORDER_STATUSES, INSTALLMENT_REQUEST_STATUSES } from "@/lib/constants";
-import {
-  Home,
-  ShoppingBag,
-  CreditCard,
-  Wallet,
-  Bell,
-  User,
-  Package,
-  ExternalLink,
-  FileText,
-  CheckCircle2,
-  XCircle,
-  Clock,
-  AlertCircle,
-} from "lucide-react";
+import { Home, ShoppingBag, CreditCard, Wallet, Bell, User, Package, ExternalLink, FileText, CheckCircle2, XCircle, Clock, AlertCircle, PackagePlus, ClipboardList } from "lucide-react";
 import type { LucideIcon } from "lucide-react";
 
 const navItems: { href: string; label: string; icon: LucideIcon }[] = [
@@ -48,6 +34,9 @@ const navItems: { href: string; label: string; icon: LucideIcon }[] = [
   { href: "/employee/orders", label: "طلباتي", icon: ShoppingBag },
   { href: "/employee/installments", label: "التقسيط", icon: CreditCard },
   { href: "/employee/payments", label: "المدفوعات", icon: Wallet },
+  { href: "/request-product", label: "طلب منتج غير مدرج", icon: PackagePlus },
+  { href: "/requests", label: "طلباتي الخاصة", icon: ClipboardList },
+  { href: "/invoices", label: "فواتيري", icon: FileText },
   { href: "/employee/notifications", label: "الإشعارات", icon: Bell },
   { href: "/employee/profile", label: "الملف الشخصي", icon: User },
 ];
@@ -202,7 +191,7 @@ export default function EmployeeOrdersPage() {
                         )}
                       </TableCell>
                       <TableCell className="text-sm font-medium">
-                        {formatCurrency(o.total)}
+                        {formatCurrency(o.total, o.currency)}
                       </TableCell>
                       <TableCell className="text-sm">{o.paymentType}</TableCell>
                       <TableCell>
@@ -281,9 +270,9 @@ export default function EmployeeOrdersPage() {
                       <TableRow key={r.id}>
                         <TableCell className="font-medium text-sm">{r.requestNumber}</TableCell>
                         <TableCell className="text-sm line-clamp-1 max-w-40">{r.productName}</TableCell>
-                        <TableCell className="text-sm font-medium">{formatCurrency(r.deferredPrice)}</TableCell>
+                        <TableCell className="text-sm font-medium">{formatCurrency(r.deferredPrice, r.currency)}</TableCell>
                         <TableCell className="text-sm">{r.durationMonths} شهراً</TableCell>
-                        <TableCell className="text-sm">{formatCurrency(r.monthlyInstallment)}</TableCell>
+                        <TableCell className="text-sm">{formatCurrency(r.monthlyInstallment, r.currency)}</TableCell>
                         <TableCell className="text-sm">
                           {r.companyApproved === null || r.companyApproved === undefined ? (
                             <span className="text-muted-foreground">—</span>

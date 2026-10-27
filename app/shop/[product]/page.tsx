@@ -1,6 +1,8 @@
 "use client";
 
 import { useParams, useRouter } from "next/navigation";
+import { MoneyApprox } from "@/components/MoneyApprox";
+import { asCurrency, roundMoney } from "@/lib/currency";
 import Link from "next/link";
 import { Header } from "@/components/layout/header";
 import { Footer } from "@/components/layout/footer";
@@ -28,7 +30,7 @@ import {
 export default function ProductDetailPage() {
   const params = useParams();
   const router = useRouter();
-  const { products, addToCart, currentUser, createInstallmentRequest } = useApp();
+  const { products, addToCart, currentUser, createInstallmentRequest, isReal } = useApp();
   const product = products.find(p => p.id === params.product);
 
   const [selectedImage, setSelectedImage] = useState(0);
@@ -56,7 +58,8 @@ export default function ProductDetailPage() {
     );
   }
 
-  const monthly = calculateMonthlyInstallment(product.deferredPrice, duration);
+  const pcur = asCurrency(product.currency);
+  const monthly = roundMoney(product.deferredPrice / duration, pcur);
   const inStock = product.stock > 0;
 
   const handleAddToCart = (paymentType: "نقدي" | "تقسيط") => {
@@ -71,6 +74,7 @@ export default function ProductDetailPage() {
       merchantId: product.merchantId,
       merchantName: product.merchantName,
       quantity,
+      currency: pcur,
       cashPrice: product.cashPrice,
       deferredPrice: product.deferredPrice,
       paymentType,
@@ -104,6 +108,16 @@ export default function ProductDetailPage() {
 
   const submitInstallmentRequest = () => {
     if (!currentUser || !product) return;
+    if (isReal) {
+      // Real mode: an installment request is an order with a guarantee and a branch, completed at checkout.
+      addToCart({
+        productId: product.id, productName: product.name, productImage: product.images[0] || "", merchantId: product.merchantId,
+        merchantName: product.merchantName, quantity, currency: pcur, cashPrice: product.cashPrice, deferredPrice: product.deferredPrice,
+        paymentType: "تقسيط", durationMonths: duration,
+      });
+      router.push("/checkout");
+      return;
+    }
     const req = createInstallmentRequest({
       userId: currentUser.id,
       userName: currentUser.name,
@@ -113,6 +127,7 @@ export default function ProductDetailPage() {
       productImage: product.images[0],
       merchantId: product.merchantId,
       merchantName: product.merchantName,
+      currency: pcur,
       cashPrice: product.cashPrice,
       deferredPrice: product.deferredPrice,
       durationMonths: duration,
@@ -204,15 +219,17 @@ export default function ProductDetailPage() {
               <Card className={inStock ? "border-primary/30" : ""}>
                 <CardContent className="p-4 text-center">
                   <p className="text-xs text-muted-foreground mb-1">السعر النقدي</p>
-                  <p className="text-2xl font-bold text-primary">{formatCurrency(product.cashPrice)}</p>
+                  <p className="text-2xl font-bold text-primary">{formatCurrency(product.cashPrice, pcur)}</p>
                   <p className="text-xs text-muted-foreground mt-1">دفع مرة واحدة</p>
+                  <MoneyApprox amount={product.cashPrice} currency={pcur} />
                 </CardContent>
               </Card>
               <Card className={product.installmentAvailable ? "border-primary/30" : "opacity-50"}>
                 <CardContent className="p-4 text-center">
                   <p className="text-xs text-muted-foreground mb-1">السعر المؤجل</p>
-                  <p className="text-2xl font-bold text-primary">{formatCurrency(product.deferredPrice)}</p>
+                  <p className="text-2xl font-bold text-primary">{formatCurrency(product.deferredPrice, pcur)}</p>
                   <p className="text-xs text-muted-foreground mt-1">عبر خطة تقسيط</p>
+                  <MoneyApprox amount={product.deferredPrice} currency={pcur} />
                 </CardContent>
               </Card>
             </div>
@@ -298,11 +315,11 @@ export default function ProductDetailPage() {
                   <div className="grid grid-cols-3 gap-3 text-center">
                     <div>
                       <p className="text-xs text-muted-foreground mb-1">القسط الشهري</p>
-                      <p className="font-bold text-primary text-sm">{formatCurrency(monthly)}</p>
+                      <p className="font-bold text-primary text-sm">{formatCurrency(monthly, pcur)}</p>
                     </div>
                     <div>
                       <p className="text-xs text-muted-foreground mb-1">إجمالي المبلغ</p>
-                      <p className="font-bold text-sm">{formatCurrency(product.deferredPrice)}</p>
+                      <p className="font-bold text-sm">{formatCurrency(product.deferredPrice, pcur)}</p>
                     </div>
                     <div>
                       <p className="text-xs text-muted-foreground mb-1">عدد الأقساط</p>
@@ -315,7 +332,7 @@ export default function ProductDetailPage() {
                     </p>
                   </div>
                   <p className="text-[10px] text-muted-foreground mt-2 text-center">
-                    * هذه أرقام تجريبية توضيحية وليست عرضاً مالياً حقيقياً
+                    * القسط تقريبي ويُثبَّت عند تأكيد الطلب
                   </p>
                 </CardContent>
               </Card>
@@ -424,11 +441,11 @@ export default function ProductDetailPage() {
               <div className="grid grid-cols-2 gap-3 text-sm">
                 <div className="rounded-lg bg-muted p-3">
                   <p className="text-xs text-muted-foreground mb-1">السعر النقدي</p>
-                  <p className="font-bold">{formatCurrency(product.cashPrice)}</p>
+                  <p className="font-bold">{formatCurrency(product.cashPrice, pcur)}</p>
                 </div>
                 <div className="rounded-lg bg-muted p-3">
                   <p className="text-xs text-muted-foreground mb-1">السعر المؤجل</p>
-                  <p className="font-bold text-primary">{formatCurrency(product.deferredPrice)}</p>
+                  <p className="font-bold text-primary">{formatCurrency(product.deferredPrice, pcur)}</p>
                 </div>
                 <div className="rounded-lg bg-muted p-3">
                   <p className="text-xs text-muted-foreground mb-1">المدة</p>
@@ -436,7 +453,7 @@ export default function ProductDetailPage() {
                 </div>
                 <div className="rounded-lg bg-muted p-3">
                   <p className="text-xs text-muted-foreground mb-1">القسط الشهري</p>
-                  <p className="font-bold text-primary">{formatCurrency(monthly)}</p>
+                  <p className="font-bold text-primary">{formatCurrency(monthly, pcur)}</p>
                 </div>
               </div>
 

@@ -19,32 +19,33 @@ import { toast } from "sonner";
 import { useState } from "react";
 
 export default function AdminPaymentsPage() {
-  const { payments, installmentContracts, recordPayment, addAuditLog, currentUser } = useApp();
+  const { payments, installmentContracts, recordPayment, addAuditLog, currentUser, isReal, toYER } = useApp();
   const [dialogOpen, setDialogOpen] = useState(false);
   const [selectedContractId, setSelectedContractId] = useState("");
   const [amount, setAmount] = useState("");
   const [method, setMethod] = useState("محفظة إلكترونية");
 
   const activeContracts = installmentContracts.filter(c => c.status === "نشط");
-  const totalPaid = payments.filter(p => p.status === "ناجح").reduce((s, p) => s + p.amount, 0);
-  const totalPending = payments.filter(p => p.status === "قيد المعالجة").reduce((s, p) => s + p.amount, 0);
+  const totalPaid = payments.filter(p => p.status === "ناجح").reduce((s, p) => s + toYER(p.amount, p.currency), 0);
+  const totalPending = payments.filter(p => p.status === "قيد المعالجة").reduce((s, p) => s + toYER(p.amount, p.currency), 0);
 
-  const handleRecordPayment = (e: React.FormEvent) => {
+  const handleRecordPayment = async (e: React.FormEvent) => {
     e.preventDefault();
     const contract = installmentContracts.find(c => c.id === selectedContractId);
     if (!contract) { toast.error("اختر عقداً"); return; }
     const amt = Number(amount) || contract.monthlyInstallment;
     const nextInstallment = contract.payments.find(p => p.status !== "مدفوع");
-    recordPayment(selectedContractId, amt, method, nextInstallment?.number);
+    const ok = await Promise.resolve(recordPayment(selectedContractId, amt, method, nextInstallment?.number));
+    if (ok === false) return;
     addAuditLog({
       actor: currentUser?.name || "مدير",
       actorRole: "admin",
-      action: "تسجيل دفعة تجريبية",
+      action: "تسجيل دفعة",
       entity: "Payment",
       entityId: selectedContractId,
-      details: `تسجيل دفعة تجريبية بقيمة ${formatCurrency(amt)} للعقد ${contract.contractNumber}`,
+      details: `تسجيل دفعة بقيمة ${formatCurrency(amt)} للعقد ${contract.contractNumber}`,
     });
-    toast.success("تم تسجيل الدفعة بنجاح");
+    if (!isReal) toast.success("تم تسجيل الدفعة بنجاح");
     setDialogOpen(false);
     setSelectedContractId("");
     setAmount("");
@@ -56,10 +57,10 @@ export default function AdminPaymentsPage() {
         <h1 className="text-2xl font-bold">إدارة المدفوعات</h1>
         <Dialog open={dialogOpen} onOpenChange={setDialogOpen}>
           <DialogTrigger asChild>
-            <Button><Plus className="h-4 w-4 ml-2" /> تسجيل دفعة تجريبية</Button>
+            <Button><Plus className="h-4 w-4 ml-2" /> تسجيل دفعة</Button>
           </DialogTrigger>
           <DialogContent>
-            <DialogHeader><DialogTitle>تسجيل دفعة تجريبية</DialogTitle></DialogHeader>
+            <DialogHeader><DialogTitle>تسجيل دفعة</DialogTitle></DialogHeader>
             <form onSubmit={handleRecordPayment} className="space-y-4">
               <div>
                 <Label className="mb-1.5 block">العقد *</Label>
@@ -128,7 +129,7 @@ export default function AdminPaymentsPage() {
                       <TableCell className="text-sm">{p.employeeName}</TableCell>
                       <TableCell className="text-sm">{contract?.contractNumber || "—"}</TableCell>
                       <TableCell className="text-sm">{p.installmentNumber || "—"}</TableCell>
-                      <TableCell className="text-sm font-bold">{formatCurrency(p.amount)}</TableCell>
+                      <TableCell className="text-sm font-bold">{formatCurrency(p.amount, p.currency)}</TableCell>
                       <TableCell className="text-sm">{p.method}</TableCell>
                       <TableCell><StatusBadge status={p.status} /></TableCell>
                       <TableCell className="text-xs text-muted-foreground">{new Date(p.createdAt).toLocaleDateString("ar-YE")}</TableCell>

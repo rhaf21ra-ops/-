@@ -12,7 +12,7 @@ import { Package, Eye, EyeOff, Trash2 } from "lucide-react";
 import { toast } from "sonner";
 
 export default function AdminProductsPage() {
-  const { products, updateProduct, deleteProduct } = useApp();
+  const { products, updateProduct, deleteProduct, isReal } = useApp();
 
   return (
     <DashboardLayout navItems={adminNavItems} title="المنتجات" role="admin">
@@ -46,7 +46,7 @@ export default function AdminProductsPage() {
                     </TableCell>
                     <TableCell className="text-sm">{p.merchantName}</TableCell>
                     <TableCell className="text-sm">{p.category}</TableCell>
-                    <TableCell className="text-sm">{formatCurrency(p.cashPrice)}</TableCell>
+                    <TableCell className="text-sm">{formatCurrency(p.cashPrice, p.currency)}</TableCell>
                     <TableCell className="text-sm">{p.stock}</TableCell>
                     <TableCell>
                       <span className={`text-xs px-2 py-1 rounded-full ${p.visible ? "bg-green-100 text-green-700" : "bg-gray-100 text-gray-700"}`}>
@@ -55,10 +55,10 @@ export default function AdminProductsPage() {
                     </TableCell>
                     <TableCell>
                       <div className="flex gap-1">
-                        <Button variant="ghost" size="icon" className="h-8 w-8" onClick={() => { updateProduct(p.id, { visible: !p.visible }); toast.success(`تم ${p.visible ? "إخفاء" : "إظهار"} المنتج`); }}>
+                        <Button variant="ghost" size="icon" className="h-8 w-8" onClick={() => { updateProduct(p.id, { visible: !p.visible }); if (!isReal) toast.success(`تم ${p.visible ? "إخفاء" : "إظهار"} المنتج`); }}>
                           {p.visible ? <EyeOff className="h-4 w-4" /> : <Eye className="h-4 w-4" />}
                         </Button>
-                        <Button variant="ghost" size="icon" className="h-8 w-8 text-destructive" onClick={() => { deleteProduct(p.id); toast.success("تم حذف المنتج"); }}>
+                        <Button variant="ghost" size="icon" className="h-8 w-8 text-destructive" onClick={() => { deleteProduct(p.id); if (!isReal) toast.success("تم حذف المنتج"); }}>
                           <Trash2 className="h-4 w-4" />
                         </Button>
                       </div>

@@ -46,7 +46,7 @@ export default function RefundPage() {
               <h2 className="font-bold text-foreground text-lg mb-2">6. الاستبدال</h2>
               <p>يمكن استبدال المنتج بمنتج آخر من نفس المتجر بنفس القيمة أو بقيمة أعلى مع دفع الفرق. إذا كان المنتج البديل أقل قيمة، يتم استرجاع الفرق.</p>
             </section>
-            <p className="text-xs text-muted-foreground pt-4 border-t">آخر تحديث: سبتمبر 2026 - هذه سياسة تجريبية لنسخة Demo</p>
+            <p className="text-xs text-muted-foreground pt-4 border-t">آخر تحديث: سبتمبر 2026</p>
           </CardContent>
         </Card>
       </div>

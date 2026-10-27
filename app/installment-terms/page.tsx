@@ -14,7 +14,7 @@ export default function InstallmentTermsPage() {
           <CardContent className="p-8 space-y-6 text-sm leading-relaxed text-muted-foreground">
             <div className="bg-primary/5 border border-primary/20 rounded-lg p-4">
               <p className="text-sm text-primary font-medium">
-                تنبيه مهم: هذه الشروط تجريبية لنسخة Demo. خدمات التقسيط والدفع الفعلية تخضع مستقبلاً للجهات المرخصة والعقود والتنظيمات المعمول بها في الجمهورية اليمنية.
+                تنبيه مهم: يُعرض السعر المؤجل وقيمة القسط قبل التأكيد، ويُعتمد الطلب بعد مراجعة بشرية، وتخضع الخدمة للأنظمة والعقود المعمول بها في الجمهورية اليمنية.
               </p>
             </div>
             <section>
@@ -51,9 +51,9 @@ export default function InstallmentTermsPage() {
             </section>
             <section>
               <h2 className="font-bold text-foreground text-lg mb-2">9. إخلاء المسؤولية</h2>
-              <p>هذه المنصة تجريبية ولا تقدم أي خدمات مالية فعلية أو ملزمة. جميع الأرقام والعمليات المعروضة هي لأغراض العرض التوضيحي فقط. أي خدمات مالية مستقبلية ستخضع للترخيص والتنظيم من قبل الجهات المختصة في الجمهورية اليمنية.</p>
+              <p>المنصة وسيط بين التاجر والعميل، وتخضع أي خدمات مالية فيها للترخيص والتنظيم من الجهات المختصة في الجمهورية اليمنية.</p>
             </section>
-            <p className="text-xs text-muted-foreground pt-4 border-t">آخر تحديث: سبتمبر 2026 - هذه شروط تجريبية لنسخة Demo</p>
+            <p className="text-xs text-muted-foreground pt-4 border-t">آخر تحديث: سبتمبر 2026</p>
           </CardContent>
         </Card>
       </div>
