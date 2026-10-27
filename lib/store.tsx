@@ -314,10 +314,33 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
   }, [state.cart, hydrated, state.currentUser?.id]);
 
   // When the signed-in user changes, load that user's saved cart (or start empty).
+  // Premium: each user has isolated cart + guest cart merges into user cart on login.
   useEffect(() => {
     if (!hydrated) return;
     try {
-      const saved = localStorage.getItem(cartKey(state.currentUser?.id));
+      const userId = state.currentUser?.id;
+      const saved = localStorage.getItem(cartKey(userId));
+      const guestCartRaw = localStorage.getItem(cartKey(null));
+
+      // If user just logged in and had guest cart, merge it
+      if (userId && guestCartRaw) {
+        try {
+          const guestCart: CartItem[] = JSON.parse(guestCartRaw);
+          if (guestCart.length > 0) {
+            const existing: CartItem[] = saved ? JSON.parse(saved) : [];
+            // Merge: keep user cart, add guest items not already present
+            const merged = [...existing];
+            for (const g of guestCart) {
+              if (!merged.find(c => c.productId === g.productId)) merged.push(g);
+            }
+            localStorage.setItem(cartKey(userId), JSON.stringify(merged));
+            localStorage.removeItem(cartKey(null));
+            setState(prev => ({ ...prev, cart: merged }));
+            return;
+          }
+        } catch {}
+      }
+
       setState(prev => ({ ...prev, cart: saved ? JSON.parse(saved) : [] }));
     } catch {
       setState(prev => ({ ...prev, cart: [] }));
