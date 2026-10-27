@@ -93,27 +93,24 @@ function Detail({ submission, person, onClose, onDecided }: {
     let alive = true;
     const created: string[] = [];
     (async () => {
-      // The edge function logs this access in audit_logs, then returns 60-second signed URLs.
+      // استخدام API المحلي (service_role) بدل Edge Function - أسرع ويعمل مع env الحالي
       const { data: sess } = await supabase.auth.getSession();
-      const supabaseUrl = process.env.NEXT_PUBLIC_SUPABASE_URL;
-      const edgeUrl = `${supabaseUrl}/functions/v1/identity-file-url`;
-      const res = await fetch(edgeUrl, {
+      const res = await fetch('/api/identity-file-url', {
         method: "POST",
         headers: {
           "Content-Type": "application/json",
           Authorization: `Bearer ${sess.session?.access_token ?? ""}`,
-          apikey: process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY ?? "",
         },
         body: JSON.stringify({ submissionId: submission.id }),
       });
       const data = res.ok ? await res.json().catch(() => null) : null;
       const error = res.ok ? null : new Error(`HTTP ${res.status}`);
       if (!alive) return;
-      if (error || !data?.urls) { console.error("signed urls failed", error); return setLoadError("تعذّر عرض الصور أو لا تملك الصلاحية"); }
+      if (error || !data?.urls) { console.error("signed urls failed", error); return setLoadError("تعذّر عرض الصور أو لا تملك الصلاحية - تأكد من تسجيل الدخول كموظف مراجعة"); }
       const out: Record<string, string> = {};
       for (const [key, url] of Object.entries(data.urls as Record<string, string>)) {
         try {
-          const blob = await (await fetch(url)).blob();     // copy now so the image keeps showing after the link expires
+          const blob = await (await fetch(url)).blob();
           const obj = URL.createObjectURL(blob);
           created.push(obj); out[key] = obj;
         } catch (e) { console.error("image fetch failed", key, e); }
