@@ -26,8 +26,8 @@ export async function POST(req: Request) {
   const admin = createClient(url, service, { auth: { persistSession: false } });
   const urls: Record<string, string> = {};
   for (const [kind, path] of Object.entries(files as Record<string, string>)) {
-    const { data, error: signError } = await admin.storage.from("identity-docs").createSignedUrl(path, 60);
+    const { data, error: signError } = await admin.storage.from("identity-docs").createSignedUrl(path, 86400);
     if (!signError && data) urls[kind] = data.signedUrl;
   }
-  return NextResponse.json({ urls, expiresInSeconds: 60 }, { headers: { "Cache-Control": "no-store" } });
+  return NextResponse.json({ urls, expiresInSeconds: 86400 }, { headers: { "Cache-Control": "no-store" } });
 }
