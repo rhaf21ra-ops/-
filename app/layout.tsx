@@ -5,9 +5,7 @@ import { AuthProvider } from "@/lib/auth-context"
 import { ToastProvider } from "@/hooks/use-toast"
 import { Toaster } from "@/components/ui/toaster"
 import { Toaster as SonnerToaster } from "@/components/ui/sonner"
-import { Header } from "@/components/layout/header"
-import { Footer } from "@/components/layout/footer"
-import { BottomNav } from "@/components/layout/bottom-nav"
+import { Shell } from "@/components/layout/shell"
 import { AuthBridge } from "@/components/AuthBridge"
 import { RouteGuard } from "@/components/RouteGuard"
 import { PWAInstaller } from "@/components/PWAInstaller"
@@ -49,10 +47,7 @@ export default function RootLayout({ children }: { children: React.ReactNode }) 
           <AuthProvider>
             <AuthBridge />
             <ToastProvider>
-            <Header />
-            <main className="flex-1 pb-16 md:pb-0"><RouteGuard>{children}</RouteGuard></main>
-            <Footer />
-            <BottomNav />
+            <RouteGuard><Shell>{children}</Shell></RouteGuard>
             <PWAInstaller />
             <Toaster />
             <SonnerToaster position="bottom-left" dir="rtl" />
