@@ -49,8 +49,10 @@ export default function MerchantProductsPage() {
     setEditingId(null);
   };
 
+  const [submitting, setSubmitting] = useState(false);
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
+    if (submitting) return; // منع التكرار عند الضغط السريع
     if (!formData.name || !formData.cashPrice) {
       toast.error("البيانات غير مكتملة");
       return;
@@ -59,6 +61,7 @@ export default function MerchantProductsPage() {
       toast.error("أضف صورة واحدة على الأقل");
       return;
     }
+    setSubmitting(true);
     const cashPrice = Number(formData.cashPrice);
     const productData = {
       merchantId: merchant!.id,
@@ -80,10 +83,12 @@ export default function MerchantProductsPage() {
 
     if (editingId) {
       const ok = await Promise.resolve(updateProduct(editingId, productData));
+      setSubmitting(false);
       if (ok === false) return;
       if (!isReal) toast.success("تم تحديث المنتج بنجاح");
     } else {
       const ok = await Promise.resolve(addProduct(productData));
+      setSubmitting(false);
       if (ok === false) return;
       if (!isReal) toast.success("تم إضافة المنتج بنجاح");
     }
@@ -168,7 +173,7 @@ export default function MerchantProductsPage() {
               </div>
               <DialogFooter>
                 <DialogClose asChild><Button type="button" variant="outline">إلغاء</Button></DialogClose>
-                <Button type="submit">{editingId ? "تحديث" : "إضافة"}</Button>
+                <Button type="submit" disabled={submitting}>{submitting ? "جاري الحفظ..." : editingId ? "تحديث" : "إضافة"}</Button>
               </DialogFooter>
             </form>
           </DialogContent>

@@ -49,6 +49,7 @@ export default function RequestProductPage() {
 
   async function onSubmit(e: React.FormEvent) {
     e.preventDefault();
+    if (busy) return; // منع النقر المزدوج والطلب المكرر
     setError("");
     if (!user) return;
     const bad = validateRequest(form);
