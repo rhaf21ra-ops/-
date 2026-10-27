@@ -48,10 +48,15 @@ export function buildBranchEmailHtml(p: BranchEmailPayload): string {
 // إرسال تلقائي عند إنشاء الطلب
 export async function sendOrderToBranchEmail(orderId: string): Promise<{ok:boolean, error?:string}> {
   const supabase = await createClient();
-  // جلب الطلب مع الفرع
+  // جلب الطلب مع الفرع - الفرع محفوظ في financing_applications (للتقسيط) وليس في orders
   const { data: order } = await supabase.from('orders').select('*').eq('id', orderId).single();
   if (!order) return { ok:false, error:'Order not found' };
-  const branchId = (order as any).branch_id || (order as any).branchId;
+  let branchId = (order as any).branch_id || (order as any).branchId;
+  // إذا لم يوجد في orders، ابحث في financing_applications (طلبات التقسيط)
+  if (!branchId) {
+    const { data: app } = await supabase.from('financing_applications').select('branch_id').eq('order_id', orderId).single();
+    branchId = (app as any)?.branch_id;
+  }
   if (!branchId) return { ok:false, error:'No branch' };
   const { data: branch } = await supabase.from('branches').select('id,name,branch_email').eq('id', branchId).single();
   if (!branch || !branch.branch_email) return { ok:false, error:'Branch email not set' };
