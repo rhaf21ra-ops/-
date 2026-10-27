@@ -3520,3 +3520,135 @@ do $$ begin
     create policy own_docs on customer_documents for all using (user_id = auth.uid() or is_admin()) with check (user_id = auth.uid() or is_admin());
   end if;
 end $$;
+-- المرحلة 3: المحتوى والنمو - قسطها v2
+-- 10 إعلانات، 12 مشاركة (موجود)، 13 إشعارات، 20 مستندات
+
+-- 10) الإعلانات
+create table if not exists advertisements (
+  id uuid primary key default gen_random_uuid(),
+  title text not null,
+  description text,
+  image_url text,
+  link_url text,
+  position text not null check (position in ('homepage','shop','category','checkout','popup')),
+  priority int not null default 0,
+  is_active boolean not null default true,
+  start_at timestamptz,
+  end_at timestamptz,
+  views int not null default 0,
+  clicks int not null default 0,
+  created_by uuid references auth.users(id),
+  created_at timestamptz default now()
+);
+create index if not exists idx_ads_position on advertisements(position, is_active, priority);
+
+-- 13) توسيع الإشعارات (موجودة، نضيف أنواع)
+-- notifications موجودة، نضيف حقل channel
+alter table notifications add column if not exists channel text default 'in_app' check (channel in ('in_app','email','sms','whatsapp'));
+alter table notifications add column if not exists is_read boolean default false;
+
+-- 20) مركز المستندات
+create table if not exists customer_documents (
+  id uuid primary key default gen_random_uuid(),
+  user_id uuid not null references auth.users(id) on delete cascade,
+  order_id uuid references orders(id) on delete set null,
+  doc_type text not null check (doc_type in ('identity','guarantee','other')),
+  file_url text not null,
+  file_name text,
+  status text not null default 'uploaded' check (status in ('uploaded','review','approved','rejected','needs_resubmit')),
+  reviewer_note text,
+  created_at timestamptz default now()
+);
+create index if not exists idx_docs_user on customer_documents(user_id);
+create index if not exists idx_docs_order on customer_documents(order_id);
+
+-- RLS
+alter table advertisements enable row level security;
+alter table customer_documents enable row level security;
+do $$ begin
+  if not exists (select 1 from pg_policies where policyname='public_ads' and tablename='advertisements') then
+    create policy public_ads on advertisements for select using (is_active and (start_at is null or start_at <= now()) and (end_at is null or end_at >= now()));
+  end if;
+  if not exists (select 1 from pg_policies where policyname='admin_ads' and tablename='advertisements') then
+    create policy admin_ads on advertisements for all using (is_admin()) with check (is_admin());
+  end if;
+  if not exists (select 1 from pg_policies where policyname='own_docs' and tablename='customer_documents') then
+    create policy own_docs on customer_documents for all using (user_id = auth.uid() or is_admin()) with check (user_id = auth.uid() or is_admin());
+  end if;
+end $$;
+-- المرحلة 4+5: العمليات والأمان - قسطها v2
+-- 14 مراحل الطلب، 15 لوحة متقدمة، 11 أدوار، 17 بحث، 21 احتيال، 16 سجل، 22 إعدادات
+
+-- 14) مراحل الطلب Timeline (موجود order_status_history، نضيف وضوح)
+create table if not exists order_timeline (
+  id uuid primary key default gen_random_uuid(),
+  order_id uuid not null references orders(id) on delete cascade,
+  status text not null,
+  title text not null,
+  description text,
+  created_at timestamptz default now(),
+  created_by uuid references auth.users(id)
+);
+create index if not exists idx_timeline_order on order_timeline(order_id);
+
+-- 21) مكافحة الاحتيال
+create table if not exists fraud_alerts (
+  id uuid primary key default gen_random_uuid(),
+  user_id uuid references auth.users(id),
+  type text not null check (type in ('multiple_accounts','coupon_abuse','repeated_orders','unusual_activity')),
+  severity text not null check (severity in ('low','medium','high')),
+  details jsonb,
+  status text not null default 'pending' check (status in ('pending','reviewed','dismissed')),
+  created_at timestamptz default now()
+);
+
+-- 11) أدوار مخصصة (توسيع roles الحالي)
+create table if not exists custom_roles (
+  id uuid primary key default gen_random_uuid(),
+  name text unique not null,
+  display_name text not null,
+  permissions jsonb not null default '[]'::jsonb,
+  created_by uuid references auth.users(id),
+  created_at timestamptz default now()
+);
+
+-- 22) إعدادات النظام المركزية
+create table if not exists system_settings (
+  key text primary key,
+  value jsonb not null,
+  description text,
+  updated_by uuid references auth.users(id),
+  updated_at timestamptz default now()
+);
+insert into system_settings (key, value, description) values
+('installment_rates', '{"default":15, "3":5, "6":8, "12":15}'::jsonb, 'نسب التقسيط الافتراضية'),
+('loyalty_rate', '{"earn_per_1000":10, "redeem_100_points":1000}'::jsonb, 'إعدادات النقاط'),
+('referral_reward', '{"referrer":100, "referred":50}'::jsonb, 'مكافآت الإحالة'),
+('fraud_thresholds', '{"max_orders_per_day":5, "max_accounts_per_ip":3}'::jsonb, 'عتبات الاحتيال')
+on conflict (key) do nothing;
+
+-- 16) توسيع سجل العمليات (audit_logs موجود، نضيف تفاصيل)
+alter table audit_logs add column if not exists old_data jsonb;
+alter table audit_logs add column if not exists new_data jsonb;
+alter table audit_logs add column if not exists ip_address text;
+
+-- RLS
+alter table order_timeline enable row level security;
+alter table fraud_alerts enable row level security;
+alter table custom_roles enable row level security;
+alter table system_settings enable row level security;
+
+do $$ begin
+  if not exists (select 1 from pg_policies where policyname='admin_timeline' and tablename='order_timeline') then
+    create policy admin_timeline on order_timeline for all using (is_admin()) with check (is_admin());
+  end if;
+  if not exists (select 1 from pg_policies where policyname='own_timeline' and tablename='order_timeline') then
+    create policy own_timeline on order_timeline for select using (exists (select 1 from orders o where o.id=order_id and o.user_id=auth.uid()));
+  end if;
+  if not exists (select 1 from pg_policies where policyname='admin_fraud' and tablename='fraud_alerts') then
+    create policy admin_fraud on fraud_alerts for all using (is_admin()) with check (is_admin());
+  end if;
+  if not exists (select 1 from pg_policies where policyname='admin_settings' and tablename='system_settings') then
+    create policy admin_settings on system_settings for all using (is_admin()) with check (is_admin());
+  end if;
+end $$;
