@@ -179,20 +179,21 @@ function Detail({ submission, person, onClose, onDecided }: {
           <textarea value={reason} onChange={(e) => setReason(e.target.value)} rows={3} maxLength={500}
             className="w-full rounded-lg border border-neutral-300 px-3 py-2" placeholder="مثال: صورة البطاقة غير واضحة، أعد التصوير بإضاءة أفضل" />
         </label>
-        <div className="grid grid-cols-1 gap-2 sm:grid-cols-3">
+        <div className="grid grid-cols-1 gap-2 sm:grid-cols-3 sticky bottom-0 bg-white pt-2">
           <button type="button" disabled={!!busy} onClick={() => decide("approved")}
-            className="flex items-center justify-center gap-2 rounded-lg bg-success px-4 py-3 font-bold text-white disabled:opacity-50">
+            className="flex items-center justify-center gap-2 rounded-lg bg-green-600 px-4 py-3 font-bold text-white disabled:opacity-50 shadow-lg">
             {busy === "approved" ? <Loader2 className="h-4 w-4 animate-spin" /> : <Check className="h-4 w-4" />} موافقة وتفعيل
           </button>
           <button type="button" disabled={!!busy} onClick={() => decide("needs_changes")}
-            className="flex items-center justify-center gap-2 rounded-lg bg-warning px-4 py-3 font-bold text-white disabled:opacity-50">
+            className="flex items-center justify-center gap-2 rounded-lg bg-amber-500 px-4 py-3 font-bold text-white disabled:opacity-50 shadow-lg">
             {busy === "needs_changes" ? <Loader2 className="h-4 w-4 animate-spin" /> : <MessageSquareWarning className="h-4 w-4" />} يحتاج تعديل
           </button>
           <button type="button" disabled={!!busy} onClick={() => decide("rejected")}
-            className="flex items-center justify-center gap-2 rounded-lg bg-error px-4 py-3 font-bold text-white disabled:opacity-50">
+            className="flex items-center justify-center gap-2 rounded-lg bg-red-600 px-4 py-3 font-bold text-white disabled:opacity-50 shadow-lg">
             {busy === "rejected" ? <Loader2 className="h-4 w-4 animate-spin" /> : <X className="h-4 w-4" />} رفض
           </button>
         </div>
+        <p className="text-xs text-center text-muted-foreground">اضغط موافقة لتفعيل حساب المستخدم فوراً</p>
       </div>
     </div>
   );
