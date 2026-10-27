@@ -24,6 +24,7 @@ import type { FinancingDetails } from "@/lib/types";
 import { CreditCard, Wallet, Truck, CheckCircle2, MapPin } from "lucide-react";
 import { useState, useEffect } from "react";
 import { toast } from "sonner";
+import { LocationPicker, type LocationValue } from "@/components/LocationPicker";
 
 export default function CheckoutPage() {
   const {
@@ -47,7 +48,13 @@ export default function CheckoutPage() {
   const [region, setRegion] = useState("");
   const [branchId, setBranchId] = useState("");
   const [guarantee, setGuarantee] = useState<GuaranteeValue>(emptyGuarantee);
+  const [orderLocation, setOrderLocation] = useState<LocationValue | null>(null);
+  const [savedAddresses, setSavedAddresses] = useState<any[]>([]);
   const [submitting, setSubmitting] = useState(false);
+
+  useEffect(()=>{ (async()=>{
+    try{ const { supabase } = await import("@/lib/supabase-client"); const { data } = await supabase.from('user_addresses').select('*'); if(data) setSavedAddresses(data); }catch{}
+  })(); },[currentUser?.id]);
 
   // Real mode: the server total has no delivery fee yet, so none is shown (never display a price that is not charged).
   const deliveryFee = isReal ? 0 : toPay(5000, "YER");
@@ -142,6 +149,12 @@ export default function CheckoutPage() {
       toast.success(paymentType === "تقسيط" ? "تم إرسال طلب التقسيط" : "تم إنشاء الطلب", {
         description: paymentType === "تقسيط" ? "سيراجعه الطرف المختص ثم تُعلَم بالنتيجة" : "سنوافيك بحالة التوصيل",
       });
+      // حفظ موقع الطلب + إرسال لبريد الفرع (لا يؤثر على نجاح الطلب)
+      const realOrderId = (r as any)?.data?.id || (r as any)?.data?.order_id || (r as any)?.data;
+      if (realOrderId) {
+        if (orderLocation) fetch('/api/orders/location',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({orderId: realOrderId, location: orderLocation})}).catch(()=>{});
+        if (financing?.branchId) fetch('/api/branch-email/send',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({orderId: realOrderId})}).catch(()=>{});
+      }
       clearCart();
       router.push(currentUser.role === "employee" ? "/employee/orders" : "/customer");
       return;
@@ -250,6 +263,11 @@ export default function CheckoutPage() {
       });
     }
 
+    // حفظ موقع الطلب (تجريبي: يحفظ محلياً، حقيقي: سيرسل للخادم عند تفعيل isReal)
+    if (orderLocation && (order as any)?.id) {
+      try { localStorage.setItem(`order-loc-${(order as any).id}`, JSON.stringify(orderLocation)); } catch {}
+    }
+
     clearCart();
     setSubmitting(false);
 
@@ -324,6 +342,9 @@ export default function CheckoutPage() {
                 </div>
               </CardContent>
             </Card>
+
+            {/* موقع الطلب - نظام المواقع الجديد */}
+            <LocationPicker value={orderLocation} onChange={setOrderLocation} savedAddresses={savedAddresses} onSaveAddress={async(addr)=>{ try{ const {supabase}=await import("@/lib/supabase-client"); const {data}=await supabase.from('user_addresses').insert({...addr,user_id: currentUser?.id}).select(); if(data) setSavedAddresses([...savedAddresses, data[0]]); }catch{} }} />
 
             {/* Payment method */}
             <Card>
