@@ -52,6 +52,39 @@ export default function CheckoutPage() {
   const [savedAddresses, setSavedAddresses] = useState<any[]>([]);
   const [submitting, setSubmitting] = useState(false);
 
+  // عند اختيار "موقعي الحالي" املأ المحافظة/المدينة/العنوان تلقائياً - يبقى على المستخدم كتابة الاسم والهاتف فقط
+  useEffect(() => {
+    if (!orderLocation?.lat || !orderLocation?.lng) return;
+    const { lat, lng } = orderLocation;
+    // استخدم Nominatim للتحويل العكسي (مجاني) - يعطي المحافظة والمدينة
+    fetch(`https://nominatim.openstreetmap.org/reverse?format=json&lat=${lat}&lon=${lng}&accept-language=ar&zoom=10`, { headers: { Accept: 'application/json' } })
+      .then(r => r.json())
+      .then((data: any) => {
+        const addr = data?.address || {};
+        const display = data?.display_name || '';
+        // حاول استخراج المحافظة اليمنية من النتيجة
+        const gov = addr.state || addr.region || addr.county || addr.province || '';
+        const city = addr.city || addr.town || addr.village || addr.county || '';
+        const road = addr.road || addr.neighbourhood || addr.suburb || '';
+        // مطابقة مع قائمة المحافظات اليمنية
+        const matchedGov = GOVERNORATES.find(g => gov.includes(g) || g.includes(gov) || display.includes(g)) || gov || '';
+        setFormData(prev => ({
+          ...prev,
+          governorate: prev.governorate || matchedGov || gov || '',
+          city: prev.city || city || '',
+          address: prev.address || (road ? `${road} - ${display.slice(0, 120)}` : display.slice(0, 180)) || `${lat.toFixed(5)}, ${lng.toFixed(5)}`,
+          area: prev.area || addr.suburb || addr.neighbourhood || '',
+        }));
+        if (matchedGov || city) toast.success('تم تعبئة المحافظة والعنوان من موقعك 📍');
+      })
+      .catch(() => {
+        setFormData(prev => ({
+          ...prev,
+          address: prev.address || `${lat.toFixed(5)}, ${lng.toFixed(5)}`,
+        }));
+      });
+  }, [orderLocation?.lat, orderLocation?.lng]);
+
   useEffect(()=>{ (async()=>{
     try{ const { supabase } = await import("@/lib/supabase-client"); const { data } = await supabase.from('user_addresses').select('*'); if(data) setSavedAddresses(data); }catch{}
   })(); },[currentUser?.id]);
