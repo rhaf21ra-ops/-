@@ -90,7 +90,7 @@ export default function AdminDashboardPremium() {
               <span className="text-sm font-medium text-emerald-100">مرحباً {currentUser?.name || "المالك"} • alwan7988@gmail.com</span>
               <Badge variant="secondary" className="bg-white/20 text-white border-white/30 hover:bg-white/30">مالك المنصة</Badge>
             </div>
-            <h1 className="text-2xl md:text-3xl font-extrabold">لوحة تحكم قسطها — إصدار المليون دولار</h1>
+            <h1 className="text-2xl md:text-3xl font-extrabold">لوحة تحكم قسطها</h1>
             <p className="text-emerald-100 text-sm mt-1 max-w-2xl">نظرة شاملة لحظية: كل سلة مفصولة لكل مستخدم، عملات ثلاث، فواتير QR، تقسيط ذكي. قاعدة البيانات جاهزة للانطلاق.</p>
           </div>
           <div className="flex gap-2 shrink-0">
@@ -221,7 +221,7 @@ export default function AdminDashboardPremium() {
         </Card>
         <Card className="border-amber-200 bg-amber-50/50">
           <CardHeader><CardTitle className="text-sm flex items-center gap-2"><Zap className="h-4 w-4 text-amber-600"/> PWA للموبايل</CardTitle></CardHeader>
-          <CardContent className="text-xs text-muted-foreground">يثبت على الشاشة، يعمل أوفلاين، إشعارات، سريع كالبرق — تجربة مليون دولار.</CardContent>
+          <CardContent className="text-xs text-muted-foreground">يثبت على الشاشة، يعمل أوفلاين، إشعارات، سريع كالبرق — تجربة متكاملة.</CardContent>
         </Card>
       </div>
     </DashboardLayout>
